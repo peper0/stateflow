@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 setuptools.setup(
     name="stateflow",
     version="0.0.1",
-    author="Tomasz Łakota",
+    author=u"Tomasz Łakota",
     author_email="tomasz@lakota.pl",
     description="A state-propagation framework.",
     long_description=long_description,
