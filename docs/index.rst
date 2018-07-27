@@ -6,11 +6,19 @@
 Welcome to stateflow's documentation!
 =====================================
 
+Examples
+--------
+
+.. automodule:: stateflow.examples.basic
+
+
+
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
-
+   introduction
+   apireference
 
 Indices and tables
 ==================
