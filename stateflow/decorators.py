@@ -6,8 +6,6 @@ import logging
 from contextlib import suppress
 from typing import Callable, Iterable, Union, overload
 
-import asyncio_extras
-
 from stateflow.common import CoroutineFunction, T, aev, ev, is_wrapper
 from stateflow.errors import SilentError
 
@@ -173,6 +171,7 @@ def reactive_finalizable(pass_args: Iterable[str] = None,
 
     def wrap(f):
         if inspect.isasyncgenfunction(f):
+            import asyncio_extras
             ff = asyncio_extras.async_contextmanager(f)
             ff._isasync = True
 
