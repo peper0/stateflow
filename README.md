@@ -1,45 +1,25 @@
 # stateflow
 
+Documentation
+-------------
 
+- https://stateflow.readthedocs.io/en/latest/
 
-$project
-========
-
-$project will solve your problem of where to start with documentation,
-by providing a basic explanation of how to do it easily.
-
-Look how easy it is to use:
-
-    import project
-    # Get your stuff done
-    project.do_stuff()
-
-Features
---------
-
-- Be awesome
-- Make things faster
 
 Installation
 ------------
 
-Install $project by running:
+Install stateflow by running:
 
-    install project
+    pip install stateflow
 
 Contribute
 ----------
 
-- Issue Tracker: github.com/$project/$project/issues
-- Source Code: github.com/$project/$project
-
-Support
--------
-
-If you are having issues, please let us know.
-We have a mailing list located at: project@google-groups.com
+- Issue Tracker: https://github.com/peper0/stateflow/issues
+- Source Code: https://github.com/peper0/stateflow
 
 License
 -------
 
-The project is licensed under the BSD license.
+The project is licensed under the MIT license.
