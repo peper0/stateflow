@@ -119,8 +119,8 @@ class ForwardersBase:
 
 class ConstForwarders(ForwardersBase):
     @abstractmethod
-    def _target(self):
-        raise NotImplementedError()
+    def _target(self):  # FIXME: is it really needed?
+        return self
 
     def __bool__(self):
         return bool(self._target().__eval__())
@@ -179,5 +179,8 @@ add_notifying_forwarders(MutatingForwarders, OTHER_MODYFING_1ARG + OTHER_MODYFIN
 
 
 class Forwarders(Proxy[T], ConstForwarders, MutatingForwarders):
+    """
+    Forwards all methods and operators to another `Observable`.
+    """
     def _target(self):
         return self

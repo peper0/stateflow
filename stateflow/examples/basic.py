@@ -1,7 +1,7 @@
 """
-Operator example
+Operators
 ~~~~~~~~~~~~~~~~
-
+Let's start with a trivial example.
 >>> from stateflow import var, assign
 >>> a = var(1)
 >>> b = var(2)
@@ -12,11 +12,17 @@ Operator example
 >>> print(a_plus_b)
 6
 
+What we do here is:
+1. Define two variables: `a` and `b`.
+2. Define a derived observable `a_plus_b` that is always equal to a sum of these variables.
+3. Print the sum.
+4. Change one of these variables and then print the sum again. Note that the sum is not explicitly computed again.
 
-Function example
+Functions
 ~~~~~~~~~~~~~~~~
-
->>> from stateflow import var, assign, reactive
+If we want to declare a derived variable that cannot be computed using simple operators, the `reactive` decorator may be
+helpful. Inside this function `a` and `b` are ordinary variables.
+>>> from stateflow import var, reactive
 >>> a = var(1)
 >>> b = var(2)
 >>>
@@ -31,13 +37,118 @@ Function example
 >>> print(text)
 4 + 2 = 6
 
+It's also easy to make a reactive version of some already existing function:
+>>> a = var()
+>>> import math
+>>> floor = reactive(math.floor)
+>>> floor_a = floor(a)
+>>> assign(a, 1.2)
+>>> print(floor_a)
+1
+
+Methods
+~~~~~~~~~~~~~~~~
+>>> from stateflow import var, reactive
+>>> a = var("Foo")
+>>> upper_a = a.upper()
+>>>
+>>> print(upper_a)
+FOO
+>>> assign(a, "Bar")
+>>> print(upper_a)
+BAR
+
+
+Fields
+~~~~~~~~~~~~~~~~
+>>> a = var(range(5))
+>>> a_stop = a.stop
+>>> print(a_stop)
+5
+>>> assign(a, range(10))
+>>> print(a_stop)
+10
+
+
+Indexing in a variable
+~~~~~~~~~~~~~~~~
+>>> a = var([4, 3, 5])
+>>> a_1 = a[1]
+>>> print(a_1)
+3
+>>> assign(a, "bar")
+>>> print(a_1)
+a
+
+Indexing using a variable
+~~~~~~~~~~~~~~~~
+>>> from stateflow import const
+>>> sequence = 'foobar'
+>>> index = var(0)
+>>> element = const(sequence)[index]
+>>> print(element)
+f
+>>> assign(index, 3)
+>>> print(element)
+b
+
+
+Other examples
+~~~~~~~~~~~~~~~~
+Normally variables are being updated only when it's needed.
+
+>>> @reactive
+... def square(a):
+...     print("computing square of {}".format(a))
+...     return a*a
+>>>
+>>> a = var(1)
+>>> b = square(a)
+computing square of 1
+>>> assign(a, 2)
+>>> assign(a, 3)
+>>> print(b)
+computing square of 3
+9
+
+#
+# Note that square of "2" was not computed since the result would not be used.
+#
+# We can enforce calling of a reactive function every time when it's arguments change:
+# >>> from stateflow import volatile
+# >>> b = volatile(square)(a)
+# computing square of 3
+# >>> assign(a, 4)
+# computing square of 4
+# >>> assign(a, 5)
+# computing square of 5
+#
+# The `volatile` function can be used as a decorator as well:
+# >>> @volatile
+# >>> @reactive
+# ... def print_on_change(a):
+# ...     print("variable is {}".format(a))
+# >>>
+# >>> a = var(1)
+# >>> print_holder = print_on_change(a)
+# variable is 1
+# >>> assign(a, 2)
+# variable is 2
+# >>> assign(a, 3)
+# variable is 3
+
+
 Todo:
 
 * ev
+* members
+
 
 * exception handling (many examples)
 
 * reactive_finalizable
-* volatile
+* volatile with condition
+* replace volatile with something
+
 
 """

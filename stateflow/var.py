@@ -35,7 +35,7 @@ class Proxy(Observable[T]):
         self._inner = inner
 
     @property
-    def __notifier__(self):
+    def __notifier__(self) -> Notifier:
         return self._inner.__notifier__
 
     def __eval__(self) -> T:

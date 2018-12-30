@@ -1,12 +1,13 @@
 from contextlib import suppress
+from functools import wraps
 from typing import Callable
 
-from stateflow.common import Observable, T
+from stateflow.common import Observable, T, ev, is_observable
 from stateflow.decorators import reactive
 from stateflow.errors import NotInitializedError, ValidationError
 from stateflow.forwarders import Forwarders
 from stateflow.notifier import ScopedName
-from stateflow.var import Const, Proxy, Var
+from stateflow.var import Const, Proxy, Var, NotifiedProxy
 
 
 def set_if_inequal(var_to_set, new_value):
@@ -29,21 +30,26 @@ def bind_vars(*vars):
     return [volatile(set_all(var)) for var in vars]
 
 
-class VolatileProxy(Proxy[T]):
-    def __init__(self, other_var: Observable[T]):
-        with ScopedName('volatile'):
-            super().__init__(other_var)
-        self._notifier.notify_func = self._trigger
-
-    def _trigger(self):
-        with suppress(Exception):
-            self._other_var.__eval__()  # trigger run even if the result is not used
-        return True
+class VolatileProxy(NotifiedProxy[T]):
+    def _notify(self):
+        ev(self._inner)
 
 
-def volatile(var):
-    if var is not None:  # var may be none if we make "volatile(foo(x))" where foo is reactive and x is not observable
+def volatile(var_or_callable):
+    if isinstance(var_or_callable, Callable):
+        func = var_or_callable
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            res = func(*args, **kwargs)
+            if is_observable(res):
+                return volatile(res)
+            else:
+                return res
+        return wrapper
+    elif is_observable(var_or_callable):
         return VolatileProxy(var)
+    else:
+        raise TypeError("argument type should be Callable or Observable (got {})".format(type(var_or_callable)))
 
 
 def const(raw):
