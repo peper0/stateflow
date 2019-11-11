@@ -1,0 +1,12 @@
+- var ma notifiera
+- notifier może być w stanie active; wówczas przekazuje notyfikacje dalej
+- jeśli notifier nie jest active, to tylko oznacza się jako "pending"
+- notifier ma licznik observerów, którzy są active i jest active iif ten licznik jest >0
+- sinki są specjalnymi observerami, którzy są active
+- dekorator funkcji ma parametry "side_effects" i "sinks"
+- "side effects" to funkcja biorąca parametry te same co funkcja dekorowana (bez unwrapowania) i zwracająca notifiery, które mają być dodatkowo powiadomione
+- "additional deps" zwraca dodatkowe notifiery
+- CallResult może być finalizowany - wówczas zakańcza bieżące wywołanie i odpina się od obserwowanych i zwraca na zawsze exception "finalized"
+- xx"shared_retval" zwraca var który jest zwracany jako wartość wyjściowa i który będzie ustawiany na wartość zwróconą z tego wywołania; wszystkie poprzednie
+- "override" - zwraca pudełko, do którego będzie wpisany ten call result, a jeśli był tam jakiś inny, to jest finalizowany przed wywołaniem funkcji
+- hold_active(var, condition: var_or_bool)

@@ -5,11 +5,10 @@ from abc import abstractmethod
 from itertools import chain
 from typing import Any, Dict, List, Set, Tuple
 
-from stateflow import SilentError
-from stateflow.common import Observable, T, ev, is_wrapper
+from stateflow.common import Observable, T, ev, is_observable
 from stateflow.decorators import DecoratedFunction
-from stateflow.errors import ArgEvalError, EvalError, raise_need_async_eval
-from stateflow.notifier import Notifier, ScopedName
+from stateflow.errors import ArgEvalError, BodyEvalError, raise_need_async_eval, EvError
+from stateflow.notifier import Notifier
 
 
 class ArgsHelper:
@@ -49,8 +48,8 @@ def eval_args(args_helper: ArgsHelper, pass_args, func_name, call_stack) -> Tupl
                 return arg
             else:
                 return ev(arg)
-        except Exception as exception:
-            raise ArgEvalError(name or str(index), func_name, call_stack, exception)
+        except EvError as exception:
+            raise ArgEvalError(name or str(index), func_name, call_stack, exception.__cause__)
 
     return ([rewrap(index, name, arg) for index, name, arg in args_helper.iterate_args()],
             {name: rewrap(index, name, arg) for index, name, arg in args_helper.iterate_kwargs()})
@@ -64,7 +63,7 @@ def observe(arg, notifier):
 
 
 def maybe_observe(arg, notifier):
-    if is_wrapper(arg):
+    if is_observable(arg):
         observe(arg, notifier)
 
 
@@ -76,9 +75,8 @@ def observe_args(args_helper: ArgsHelper, pass_args: Set[str], notifier):
 
 class CallResult(Observable[T]):
     def __init__(self, decorated: DecoratedFunction, args, kwargs):
-        with ScopedName(name=decorated.callable.__name__):
-            self.decorated = decorated  # type: DecoratedFunction
-            self._notifier = Notifier()
+        self.decorated = decorated  # type: DecoratedFunction
+        self._notifier = Notifier()
 
         # use dep_only_args
         for name in decorated.decorator.dep_only_args:
@@ -133,18 +131,16 @@ class CallResult(Observable[T]):
         - an async context manager (a mix of above)
         """
         assert self._update_in_progress == False, 'circular dependency containing "{}" called at:\n{}'.format(
-            self.callable.__name__, self.call_stack)
+            self.decorated.callable.__name__, self.call_stack)
         try:
             self._update_in_progress = True
             args, kwargs = eval_args(self.args_helper, self.decorated.decorator.pass_args,
                                      self.decorated.callable.__name__, self.call_stack)
+
             try:
                 return self.decorated.really_call(args, kwargs)
-            except SilentError as e:  # SilentError may be thrown from the function body too (e.g. from validators)
-                # raise SilentError(EvalError(self.call_stack, e))
-                raise e
             except Exception as e:
-                raise EvalError(self.call_stack, e)
+                raise BodyEvalError(self.call_stack, e.with_traceback(e.__traceback__.tb_next.tb_next))
         finally:
             self._update_in_progress = False
 
@@ -172,14 +168,14 @@ class CmCallResult(CallResult[T]):
         self.cm = None
 
     def __eval__(self):
-        self._cleanup()
+        self.__finalize__()
         self.cm = self._call()
         return self.cm.__enter__()
 
     def __del__(self):
-        self._cleanup()
+        self.__finalize__()
 
-    def _cleanup(self):
+    def __finalize__(self):
         try:
             if self.cm:
                 self.cm.__exit__(None, None, None)
@@ -194,14 +190,14 @@ class AsyncCmCallResult(CallResult[T]):
         self.cm = None
 
     async def __aeval__(self):
-        await self._cleanup()
+        await self.__afinalize__()
         self.cm = self._call()
         return await self.cm.__aenter__()
 
     def __del__(self):
-        asyncio.ensure_future(self._cleanup())
+        asyncio.ensure_future(self.__afinalize__())
 
-    async def _cleanup(self):
+    async def __afinalize__(self):
         try:
             if self.cm:
                 cm = self.cm

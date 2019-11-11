@@ -6,25 +6,23 @@ import logging
 from contextlib import suppress
 from typing import Callable, Iterable, Union, overload
 
-from stateflow.common import CoroutineFunction, T, aev, ev, is_wrapper
-from stateflow.errors import SilentError
+from stateflow.common import CoroutineFunction, T, aev, ev, is_observable
+
+deprecated_interactive_mode = False
 
 
 def make_reactive_result(cr: 'CallResult[T]'):
-    from stateflow.forwarders import Forwarders
     from stateflow.var import Cache
-    res = Forwarders(Cache(cr))
-    # TODO: make some configurable policies about: evaluating function immediately; treating errors in this call
-    with suppress(SilentError):
+    res = Cache(cr)
+    if deprecated_interactive_mode:
         ev(res)
     return res
 
 
 async def make_async_reactive_result(cr: 'CallResult[T]'):
-    from stateflow.forwarders import Forwarders
     from stateflow.var import AsyncCache
-    res = Forwarders(AsyncCache(cr))
-    with suppress(SilentError):
+    res = AsyncCache(cr)
+    if deprecated_interactive_mode:
         await aev(res)
     return res
 
@@ -44,20 +42,12 @@ class Reactive:
             def factory(decorated, args, kwargs):
                 # import here to avoid circular dependency (AsyncReactiveProxy does Reactive.__call__ for it's members)
                 from stateflow.call_result import AsyncCallResult
-                call_result = AsyncCallResult(decorated, args, kwargs)
-                if args_need_reaction(call_result.args, call_result.kwargs):
-                    return make_async_reactive_result(call_result)
-                else:
-                    return decorated.really_call(args, kwargs)
+                return make_async_reactive_result(AsyncCallResult(decorated, args, kwargs))
         elif hasattr(func, '__call__'):
             def factory(decorated, args, kwargs):
                 # import here to avoid circular dependency (SyncReactiveProxy does Reactive.__call__ for it's members)
                 from stateflow.call_result import SyncCallResult
-                res = SyncCallResult(decorated, args, kwargs)
-                if args_need_reaction(res.args, res.kwargs):
-                    return make_reactive_result(res)
-                else:
-                    return decorated.really_call(args, kwargs)
+                return make_reactive_result(SyncCallResult(decorated, args, kwargs))
         else:
             raise Exception("{} is neither a function nor a coroutine function (async def...)".format(repr(func)))
         return DecoratedFunction(self, factory, func)
@@ -184,4 +174,4 @@ def reactive_finalizable(pass_args: Iterable[str] = None,
 
 
 def args_need_reaction(args: tuple, kwargs: dict):
-    return any((is_wrapper(arg) for arg in args + tuple(kwargs.values())))
+    return any((is_observable(arg) for arg in args + tuple(kwargs.values())))

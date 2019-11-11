@@ -1,13 +1,10 @@
-from contextlib import suppress
 from functools import wraps
 from typing import Callable
 
 from stateflow.common import Observable, T, ev, is_observable
 from stateflow.decorators import reactive
 from stateflow.errors import NotInitializedError, ValidationError
-from stateflow.forwarders import Forwarders
-from stateflow.notifier import ScopedName
-from stateflow.var import Const, Proxy, Var, NotifiedProxy
+from stateflow.var import Const, NotifiedProxy, Var
 
 
 def set_if_inequal(var_to_set, new_value):
@@ -38,6 +35,7 @@ class VolatileProxy(NotifiedProxy[T]):
 def volatile(var_or_callable):
     if isinstance(var_or_callable, Callable):
         func = var_or_callable
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             res = func(*args, **kwargs)
@@ -45,6 +43,7 @@ def volatile(var_or_callable):
                 return volatile(res)
             else:
                 return res
+
         return wrapper
     elif is_observable(var_or_callable):
         return VolatileProxy(var)
@@ -53,11 +52,11 @@ def volatile(var_or_callable):
 
 
 def const(raw):
-    return Forwarders(Const(raw))
+    return Const(raw)
 
 
 def var(raw=Var.NOT_INITIALIZED):
-    return Forwarders(Var(raw))
+    return Var(raw)
 
 
 @reactive

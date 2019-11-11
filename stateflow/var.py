@@ -1,15 +1,17 @@
 from abc import abstractmethod
 from typing import Any, Union
 
-from stateflow.common import Observable, T, is_observable
+from stateflow.common import Observable, T, is_observable, assign
 from stateflow.errors import NotInitializedError, raise_need_async_eval
+from stateflow.forwarders import ConstForwarders, MutatingForwarders
 from stateflow.notifier import DummyNotifier, Notifier
 
 
-class Const(Observable[T]):
+class Const(Observable[T], ConstForwarders):
     """
     Simple implementation of `Observable` that holds the same value through the lifetime.
     """
+    repr_name = 'Const'
 
     dummy_notifier = DummyNotifier(priority=0)
 
@@ -47,30 +49,23 @@ class Proxy(Observable[T]):
     def __assign__(self, value: T):
         self._inner.__assign__(value)
 
+    def __finalize__(self):
+        self._inner.__finalize__()
 
-class NotifiedProxy(Observable[T]):
+
+class NotifiedProxy(Proxy[T]):
     """
     Like `Proxy` but has own `Notifier` so it can be notified independently of the inner `Observable`.
     """
 
     def __init__(self, inner: Observable[T]):
-        super().__init__()
-        self._notifier = Notifier(self.notify)
-        self._inner = inner  # type: Observable[T]
+        super().__init__(inner)
+        self._notifier = Notifier(self._notify)
         self._inner.__notifier__.add_observer(self._notifier)
 
     @property
     def __notifier__(self):
         return self._notifier
-
-    def __eval__(self) -> T:
-        return self._inner.__eval__()
-
-    async def __aeval__(self):
-        return await self._inner.__aeval__()
-
-    def __assign__(self, value: Union['Observable', Any]):
-        self._inner.__assign__(value)
 
     def _notify(self):
         pass
@@ -89,7 +84,7 @@ class VarProxy(NotifiedProxy[T]):
         assert is_observable(inner)
         with self._notifier:
             self._unobserve_value()
-            self._inner @= inner
+            assign(self._inner, inner)
             self._observe_value()
 
     def _unobserve_value(self):
@@ -99,7 +94,7 @@ class VarProxy(NotifiedProxy[T]):
         return self._inner.__notifier__.add_observer(self._notifier)
 
 
-class Var(Observable[T]):
+class Var(Observable[T], ConstForwarders, MutatingForwarders):
     """
     A simple `Observable` that holds a raw value that can be changed.
     """
@@ -108,6 +103,7 @@ class Var(Observable[T]):
         pass
 
     NOT_INITIALIZED = NotInitialized()
+    repr_name = 'Var'
 
     def __init__(self, value: T = NOT_INITIALIZED):
         super().__init__()
@@ -128,7 +124,7 @@ class Var(Observable[T]):
             self._value = value
 
 
-class CacheBase(Observable[T]):
+class CacheBase(Observable[T], ConstForwarders):
     """
     See `Cache` for description.
     """
@@ -180,7 +176,7 @@ class Cache(CacheBase[T]):
             self._cache_is_valid = True
 
 
-class AsyncCache(CacheBase[T]):
+class AsyncCache(CacheBase[T], ConstForwarders):
     async def __aeval__(self):
         await self._async_update_cache()
         if self._cached_exception:

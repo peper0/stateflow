@@ -18,6 +18,7 @@ What we do here is:
 3. Print the sum.
 4. Change one of these variables and then print the sum again. Note that the sum is not explicitly computed again.
 
+
 Functions
 ~~~~~~~~~~~~~~~~
 If we want to declare a derived variable that cannot be computed using simple operators, the `reactive` decorator may be
@@ -45,6 +46,7 @@ It's also easy to make a reactive version of some already existing function:
 >>> assign(a, 1.2)
 >>> print(floor_a)
 1
+
 
 Methods
 ~~~~~~~~~~~~~~~~
@@ -80,6 +82,7 @@ Indexing in a variable
 >>> print(a_1)
 a
 
+
 Indexing using a variable
 ~~~~~~~~~~~~~~~~
 >>> from stateflow import const
@@ -93,23 +96,11 @@ f
 b
 
 
-Other examples
-~~~~~~~~~~~~~~~~
-Normally variables are being updated only when it's needed.
 
->>> @reactive
-... def square(a):
-...     print("computing square of {}".format(a))
-...     return a*a
->>>
->>> a = var(1)
->>> b = square(a)
-computing square of 1
->>> assign(a, 2)
->>> assign(a, 3)
->>> print(b)
-computing square of 3
-9
+"""
+
+"""
+
 
 #
 # Note that square of "2" was not computed since the result would not be used.

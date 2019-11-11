@@ -9,7 +9,7 @@ import asynctest
 from stateflow import ArgEvalError, NotInitializedError, Notifier, Observable, ev, ev_exception, reactive, \
     reactive_finalizable, var
 from stateflow.common import aev
-from stateflow.errors import EvalError, ValidationError
+from stateflow.errors import BodyEvalError, ValidationError
 from stateflow.utils import not_none, validate_arg
 
 
@@ -467,7 +467,7 @@ class ValidateArgs(asynctest.TestCase):
 
     async def test_lambda_validator(self):
         a = var(-1)
-        with self.assertRaises(EvalError) as cm:
+        with self.assertRaises(BodyEvalError) as cm:
             res = process_positive_num(a)
 
         self.assertIsInstance(cm.exception.__cause__, AssertionError)
@@ -481,7 +481,7 @@ class ValidateArgs(asynctest.TestCase):
 
     async def test_not_none(self):
         a = var(None)
-        with self.assertRaises(EvalError):
+        with self.assertRaises(BodyEvalError):
             res = process_positive_num(a)
 
         res2 = process_positive_num(not_none(a))

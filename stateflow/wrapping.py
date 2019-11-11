@@ -2,7 +2,7 @@ from typing import Any, Callable, Iterable, Sequence, Tuple
 
 from stateflow import reactive
 from stateflow.common import ev
-from stateflow.notifier import Notifier, ScopedName, many_notifiers
+from stateflow.notifier import Notifier, many_notifiers
 
 
 def get_subnotifier(self: Notifier, name: str) -> Notifier:
@@ -73,8 +73,7 @@ def add_reactive_forwarders(cl: Any, functions: Iterable[Tuple[str, Callable]]):
             prefix = ''
             if hasattr(self, '__notifier__'):
                 preifx = self.__notifier__.name + '.'
-            with ScopedName(name=preifx + name, final=True):
-                return reactive_f(self, *args)
+            return reactive_f(self, *args)
 
         setattr(cl, name, wrapped)
 

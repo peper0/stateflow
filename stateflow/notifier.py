@@ -78,7 +78,7 @@ class ScopedName:
 class Notifier:
     def __init__(self, notify_func: NotifyFunc = lambda: True):
         self._observers = weakref.WeakSet()  # type: Set[Notifier]
-        self.name = '/'.join(ScopedName.names)
+        self.name = ''
         assert is_notify_func(notify_func)
         self.notify_func = notify_func
         self.calls = 0

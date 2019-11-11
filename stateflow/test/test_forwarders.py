@@ -2,7 +2,7 @@ import asynctest
 from numpy.testing import assert_array_equal
 
 from stateflow import ArgEvalError, const, ev, var
-from stateflow.errors import EvalError
+from stateflow.errors import BodyEvalError
 
 
 class Forwarders(asynctest.TestCase):
@@ -60,11 +60,11 @@ class Forwarders(asynctest.TestCase):
         self.assertEqual(ev(res), 'B')
 
         a @= ('A',)
-        with self.assertRaises(EvalError):
+        with self.assertRaises(BodyEvalError):
             ev(res)
 
         a @= 5
-        with self.assertRaises(EvalError):
+        with self.assertRaises(BodyEvalError):
             ev(res)
 
         # check if it works again

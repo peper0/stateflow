@@ -3,6 +3,7 @@ Exceptions definitions.
 """
 
 import traceback
+from contextlib import suppress
 
 
 class NotInitializedError(Exception):
@@ -10,25 +11,14 @@ class NotInitializedError(Exception):
         super().__init__('not initialized')
 
 
-class SilentError(Exception):
-    """
-    An exception that is silently propagated and not raised unless explicit unwrapping is done on the variable.
-    The error that is silenced should be the cause of this error.
-    """
-
-    def __init__(self, cause=None, *args):
-        super().__init__(*args)
-        if cause:
-            self.__cause__ = cause
-
-
-class ArgEvalError(SilentError):
+class ArgEvalError(Exception):
     """
     A reactive argument is in error state. The argument error should be the cause of this error.
     """
 
     def __init__(self, arg_name, function_name, call_stack, cause):
-        super().__init__(cause)
+        super().__init__()
+        self.__cause__ = cause
         #        super().__init__("error in argument '{}' of '{}'".format(arg_name, function_name))
         self.call_stack = call_stack
         self.arg_name = arg_name
@@ -36,18 +26,22 @@ class ArgEvalError(SilentError):
 
     def __str__(self):
         # stack2 = traceback.extract_tb(self.__cause__.__traceback__.tb_next)
-        return "\nError while evaluating argument '{}' of '{}' called at (most recent call last):\n{}" \
+        return "While evaluating argument '{}' of '{}' instanced at (most recent call last):\n{}" \
             .format(self.arg_name, self.function_name,
                     ''.join(traceback.format_list(self.call_stack)))
 
 
-class ValidationError(SilentError):
+class EvError(Exception):
+    pass
+
+
+class ValidationError:
     """
     An argument doesn't satisfy some criterion so the function is not called.
     """
 
     def __init__(self, description):
-        super().__init__(None, description)
+        super().__init__(description)
 
 
 class NotAssignable(Exception):
@@ -61,7 +55,7 @@ def raise_need_async_eval():
     raise Exception("called __eval__ on the value that depends on an asynchronously evaluated value; use __aeval__")
 
 
-class EvalError(Exception):
+class BodyEvalError(Exception):
     """
     An exception occured while evaluation of some Observable.
     """
@@ -71,6 +65,8 @@ class EvalError(Exception):
         self.__cause__ = cause
 
     def __str__(self):
-        stack2 = traceback.extract_tb(self.__cause__.__traceback__.tb_next.tb_next)
-        return "\nError while evaluation (most recent call last):\n" + ''.join(
-            traceback.format_list(self.defined_stack + stack2))
+        stack2 = []
+        with suppress(Exception):
+            stack2 = traceback.extract_tb(self.__cause__.__traceback__)
+        return "While evaluating function body at (most recent call last):\n" + ''.join(
+            traceback.format_list(self.defined_stack+stack2))
