@@ -1,12 +1,16 @@
 import logging
 import weakref
 from _weakrefset import WeakSet
-from contextlib import contextmanager
 from typing import Set
 
 from stateflow.common import NotifyFunc
+from stateflow.sync_refresher import get_default_refresher
 
 logger = logging.getLogger('notify')
+
+all_notifiers = WeakSet()
+
+_got_finals = 0
 
 
 def is_hashable(v):
@@ -33,138 +37,101 @@ class DummyNotifier:
     def remove_observer(self, notifier: 'Notifier'):
         pass
 
-    def __enter__(self):
+    def notify_observers(self):
         pass
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
-
-    def notify(self):
-        pass
-
-
-all_notifiers = WeakSet()
-
-_got_finals = 0
-
-
-class ScopedName:
-    names = []
-
-    def __init__(self, name, final=False):
-        """
-        :param name:
-        :param final: Don't chain with ScopedName()s already on the stack
-        """
-        self.name = name
-        self.final = final
-
-    def __enter__(self):
-        global _got_finals
-        if self.name is not None and _got_finals == 0:
-            self.names.append(self.name)
-        if self.final:
-            _got_finals += 1
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        global _got_finals
-        if self.final:
-            _got_finals -= 1
-        if self.name is not None and _got_finals == 0:
-            res = self.names.pop()
-            assert res == self.name
 
 
 class Notifier:
-    def __init__(self, notify_func: NotifyFunc = lambda: True):
+    def __init__(self, notify_func: NotifyFunc = lambda: True, forced_active=False):
         self._observers = weakref.WeakSet()  # type: Set[Notifier]
-        self.name = ''
+        self._active_observers = weakref.WeakSet()  # type: Set[Notifier]
+        self._observed = weakref.WeakSet()  # type: Set[Notifier]
+
+        self._priority = 0  # lowest called first; should be greater than all observed
+
+        self._forced_active = forced_active
+        self._is_active = forced_active  # notifier is active iif at least one of it's observers is active or _forced_active
+
+        self._called_when_inactive = False
+
+        self.name = "FIXME"
         assert is_notify_func(notify_func)
         self.notify_func = notify_func
         self.calls = 0
         self.stats = dict()
         self.frame = None
         all_notifiers.add(self)
-        self.pending_updates = 0
-        self.possibly_changed = False
-        self.recursion_in_progress = False
-        #  lowest called first; should be greater than all observed
 
     def notify(self):
-        self.begin_update()
-        self.finish_update(True)
+        get_default_refresher().schedule_call(self)
+
+    def call(self):
+        self.calls += 1
+        if self.active:
+            possibly_changed = self.notify_func()
+            if possibly_changed:
+                self._notify_observers()
+        else:
+            self._called_when_inactive = True
+
+    def _notify_observers(self):
+        for observer in self._observers:
+            observer.notify()
 
     def add_observer(self, observer: 'Notifier'):
+        """
+        :param observer: A notifier that will be notified (WARNING! it must be owned somewhere else; it's especially
+                       important for bound methods or partially bound functions). It must be hashable and equality
+                       comparable. If there are more than one calls to the same notifier pending, they are reduced to
+                       one only. It will take part in the topological sort when obtaining an order of
+                       notifications. It's priority will be enforced to be greater than the priority of this object.
+        """
+        observer._set_priority_at_least(self.priority + 1)
         self._observers.add(observer)
-        if self.pending_updates > 0:
-            observer.begin_update()
+        observer._observed.add(self)
+        if observer.active:
+            self._add_to_active(observer)
+
+    def _add_to_active(self, observer):
+        self._active_observers.add(observer)
+        self._update_active()
 
     def remove_observer(self, observer: 'Notifier'):
+        assert observer in self._observers
         self._observers.remove(observer)
-        if self.pending_updates > 0:
-            observer.begin_update()
+        observer._observed.remove(self)
+        if observer in self._active_observers:
+            self._remove_from_active(observer)
 
-    def _observer_begin_update(self, observer):
-        assert self.recursion_in_progress == False
-        self.recursion_in_progress = True
-        try:
-            observer.begin_update()
-        except Exception as e:
-            logging.exception('ignoring exception in finish_update')
-        finally:
-            self.recursion_in_progress = False
+    def _remove_from_active(self, observer):
+        self._active_observers.remove(observer)
+        self._update_active()
 
-    def begin_update(self):
-        if self.recursion_in_progress:
-            return  # handle circular dependencies
-        self.pending_updates += 1
-        if self.pending_updates == 1:
-            self.possibly_changed = False
-            observers = self._observers  # it may change during the following calls
-            for observer in observers:
-                self._observer_begin_update(observer)
+    def _update_active(self):
+        if (len(self._active_observers) > 0 or self._forced_active) != self._is_active:
+            self._is_active = len(self._active_observers) > 0
+            for observed in self._observed:
+                if self._is_active:
+                    observed._add_to_active(self)
+                else:
+                    observed._remove_from_active(self)
+            if self._is_active and self._called_when_inactive:
+                self._called_when_inactive = False
+                self.notify()
 
-    def _observer_finish_update(self, observer, possibly_changed):
-        assert self.recursion_in_progress == False
-        self.recursion_in_progress = True
-        try:
-            observer.finish_update(possibly_changed)
-        except Exception as e:
-            logging.exception('ignoring exception in finish_update')
-        finally:
-            self.recursion_in_progress = False
+    @property
+    def priority(self):
+        return self._priority
 
-    def finish_update(self, possibly_changed):
-        if self.recursion_in_progress:
-            return  # handle circular dependencies
-        assert self.pending_updates > 0
-        self.possibly_changed = self.possibly_changed or possibly_changed
-        if self.pending_updates == 1:
-            try:
-                if self.possibly_changed:
-                    self.notify_func()
-            except Exception as e:
-                logging.exception('ignoring exception in finish_update')
-            observers = self._observers  # it may change during the following calls
-            for observer in observers:
-                self._observer_finish_update(observer, possibly_changed)
+    @property
+    def active(self):
+        # self._update_active()
+        return self._is_active
 
-        self.pending_updates -= 1
-
-    def __enter__(self):
-        self.begin_update()
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.finish_update(True)
+    def _set_priority_at_least(self, min_priority):
+        if self._priority < min_priority:
+            self._priority = min_priority
+            for observer in self._observers:
+                observer._set_priority_at_least(min_priority + 1)
 
 
-@contextmanager
-def many_notifiers(*notifiers):
-    for notifier in notifiers:
-        notifier.begin_update()
-
-    try:
-        yield
-    finally:
-        for notifier in reversed(notifiers):
-            notifier.finish_update(True)

@@ -2,7 +2,7 @@ from typing import Any, Callable, Iterable, Sequence, Tuple
 
 from stateflow import reactive
 from stateflow.common import ev
-from stateflow.notifier import Notifier, many_notifiers
+from stateflow.notifier import Notifier
 
 
 def get_subnotifier(self: Notifier, name: str) -> Notifier:

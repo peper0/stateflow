@@ -13,34 +13,6 @@ from stateflow.errors import BodyEvalError, ValidationError
 from stateflow.utils import not_none, validate_arg
 
 
-class NotifierTests(unittest.TestCase):
-    def setUp(self):
-        self._notifier = Notifier(lambda: True)
-        self._notifier2 = Notifier(self.cbk)
-        self.cbk_called = 0
-
-    def cbk(self):
-        self.cbk_called += 1
-        return False
-
-    def test_calls_callback(self):
-        self._notifier.add_observer(self._notifier2)
-        self.assertEqual(self.cbk_called, 0)
-
-        with self._notifier:
-            pass
-
-        self.assertEqual(self.cbk_called, 1)
-
-    def test_dont_call_multiple(self):
-        self._notifier.add_observer(self._notifier2)
-        self.assertEqual(self.cbk_called, 0)
-
-        with self._notifier:
-            with self._notifier:
-                pass
-
-        self.assertEqual(self.cbk_called, 1)
 
 
 @reactive
@@ -326,12 +298,12 @@ class OtherDeps(asynctest.TestCase):
         ev(res)
         self.assertEqual(2, called_times)
 
-        some_observable.__notifier__.notify()
+        some_observable.__notifier__.call()
         await asyncio.sleep(1)
         ev(res)
         self.assertEqual(3, called_times)
 
-        some_observable.__notifier__.notify()
+        some_observable.__notifier__.call()
         await asyncio.sleep(1)
         ev(res)
         self.assertEqual(4, called_times)
@@ -364,7 +336,7 @@ class DepOnlyArgs(asynctest.TestCase):
         self.assertEqual(10, res)
         self.assertEqual(2, called_times2)
 
-        self.observable1.__notifier__.notify()
+        self.observable1.__notifier__.call()
         self.assertEqual(10, res)
         self.assertEqual(3, called_times2)
 
@@ -376,11 +348,11 @@ class DepOnlyArgs(asynctest.TestCase):
         self.assertEqual(55, res)
         self.assertEqual(1, called_times2)
 
-        self.observable1.__notifier__.notify()
+        self.observable1.__notifier__.call()
         self.assertEqual(55, res)
         self.assertEqual(2, called_times2)
 
-        self.observable2.__notifier__.notify()
+        self.observable2.__notifier__.call()
         self.assertEqual(55, res)
         self.assertEqual(3, called_times2)
 
