@@ -1,3 +1,5 @@
+- test some diamond-like structure of vars and check if everything is computed only once and only if active
+
 - var ma notifiera
 - notifier może być w stanie active; wówczas przekazuje notyfikacje dalej
 - jeśli notifier nie jest active, to tylko oznacza się jako "pending"

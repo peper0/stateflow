@@ -3,7 +3,7 @@ import logging
 import traceback
 from abc import abstractmethod
 from itertools import chain
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple, Callable
 
 from stateflow.common import Observable, T, ev, is_observable
 from stateflow.decorators import DecoratedFunction
@@ -50,6 +50,9 @@ def eval_args(args_helper: ArgsHelper, pass_args, func_name, call_stack) -> Tupl
                 return ev(arg)
         except EvError as exception:
             raise ArgEvalError(name or str(index), func_name, call_stack, exception.__cause__)
+        except Exception as e:
+             raise ArgEvalError(name or str(index), func_name, call_stack,
+                                e.with_traceback(e.__traceback__.tb_next.tb_next.tb_next))
 
     return ([rewrap(index, name, arg) for index, name, arg in args_helper.iterate_args()],
             {name: rewrap(index, name, arg) for index, name, arg in args_helper.iterate_kwargs()})
@@ -59,7 +62,7 @@ def observe(arg, notifier):
     if isinstance(arg, Notifier):
         return arg.add_observer(notifier)
     else:
-        return arg.__notifier__.add_observer(notifier)
+        return arg.__notifier__().add_observer(notifier)
 
 
 def maybe_observe(arg, notifier):
@@ -73,6 +76,12 @@ def observe_args(args_helper: ArgsHelper, pass_args: Set[str], notifier):
             maybe_observe(arg, notifier)
 
 
+def callable_name(c: Callable):
+    if hasattr(c, '__name__'):
+        return c.__name__
+    else:
+        "<unknown>"
+
 class CallResult(Observable[T]):
     def __init__(self, decorated: DecoratedFunction, args, kwargs):
         self.decorated = decorated  # type: DecoratedFunction
@@ -85,13 +94,13 @@ class CallResult(Observable[T]):
 
                 if isinstance(arg, (list, tuple)):
                     for a in arg:
-                        observe(a, self.__notifier__)
+                        observe(a, self.__notifier__())
                 else:
-                    observe(arg, self.__notifier__)
+                    observe(arg, self.__notifier__())
 
         # use other_deps
         for dep in decorated.decorator.other_deps:
-            maybe_observe(dep, self.__notifier__)
+            maybe_observe(dep, self.__notifier__())
 
         self.args_helper = ArgsHelper(args, kwargs, decorated.signature, decorated.callable)
         self.args = self.args_helper.args
@@ -100,9 +109,8 @@ class CallResult(Observable[T]):
 
         self.call_stack = traceback.extract_stack()[:-3]
 
-        observe_args(self.args_helper, self.decorated.decorator.pass_args, self.__notifier__)
+        observe_args(self.args_helper, self.decorated.decorator.pass_args, self.__notifier__())
 
-    @property
     def __notifier__(self):
         return self._notifier
 
@@ -129,13 +137,15 @@ class CallResult(Observable[T]):
         - a coroutine (must be awaited),
         - a context manager (must be __enter__ed to obtain value, then __exited__ before next __enter__)
         - an async context manager (a mix of above)
+
+        :raise BodyEvalError or ArgEvalError. Other exceptions are kind of internal error.
         """
         assert self._update_in_progress == False, 'circular dependency containing "{}" called at:\n{}'.format(
-            self.decorated.callable.__name__, self.call_stack)
+            callable_name(self.decorated.callable), self.call_stack)
         try:
             self._update_in_progress = True
             args, kwargs = eval_args(self.args_helper, self.decorated.decorator.pass_args,
-                                     self.decorated.callable.__name__, self.call_stack)
+                                     callable_name(self.decorated.callable), self.call_stack)
 
             try:
                 return self.decorated.really_call(args, kwargs)

@@ -11,9 +11,14 @@ class NotInitializedError(Exception):
         super().__init__('not initialized')
 
 
+class FinalizedError(Exception):
+    def __init__(self):
+        super().__init__('observable cannot be read once finalized')
+
+
 class ArgEvalError(Exception):
     """
-    A reactive argument is in error state. The argument error should be the cause of this error.
+    A reactive argument is in error state. The argument error should be the *cause* of this error.
     """
 
     def __init__(self, arg_name, function_name, call_stack, cause):
@@ -26,12 +31,15 @@ class ArgEvalError(Exception):
 
     def __str__(self):
         # stack2 = traceback.extract_tb(self.__cause__.__traceback__.tb_next)
-        return "While evaluating argument '{}' of '{}' instanced at (most recent call last):\n{}" \
+        return "While evaluating argument '{}' of '{}' called at (most recent call last):\n{}" \
             .format(self.arg_name, self.function_name,
                     ''.join(traceback.format_list(self.call_stack)))
 
 
 class EvError(Exception):
+    """
+    The main purpose of this error is to hide a part of stack between "ev()" and the place where this exception was raised.
+    """
     pass
 
 
@@ -69,4 +77,4 @@ class BodyEvalError(Exception):
         with suppress(Exception):
             stack2 = traceback.extract_tb(self.__cause__.__traceback__)
         return "While evaluating function body at (most recent call last):\n" + ''.join(
-            traceback.format_list(self.defined_stack+stack2))
+            traceback.format_list(self.defined_stack + stack2))

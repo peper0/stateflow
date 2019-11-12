@@ -6,7 +6,7 @@ import logging
 from contextlib import suppress
 from typing import Callable, Iterable, Union, overload
 
-from stateflow.common import CoroutineFunction, T, aev, ev, is_observable
+from stateflow.common import CoroutineFunction, T, ev, is_observable
 
 deprecated_interactive_mode = False
 
@@ -20,11 +20,12 @@ def make_reactive_result(cr: 'CallResult[T]'):
 
 
 async def make_async_reactive_result(cr: 'CallResult[T]'):
-    from stateflow.var import AsyncCache
-    res = AsyncCache(cr)
-    if deprecated_interactive_mode:
-        await aev(res)
-    return res
+    raise NotImplemented()
+    # from stateflow.var import AsyncCache
+    # res = AsyncCache(cr)
+    # if deprecated_interactive_mode:
+    #     await aev(res)
+    # return res
 
 
 class Reactive:

@@ -1,12 +1,13 @@
-import asynctest
+import unittest
+
 from numpy.testing import assert_array_equal
 
 from stateflow import ArgEvalError, const, ev, var
 from stateflow.errors import BodyEvalError
 
 
-class Forwarders(asynctest.TestCase):
-    async def test_operator_add(self):
+class Forwarders(unittest.TestCase):
+    def test_operator_add(self):
         a = var(2)
         b = const(5)
         res = a + b
@@ -15,14 +16,14 @@ class Forwarders(asynctest.TestCase):
         a @= 6
         self.assertEqual(ev(res), 11)  # 6+5
 
-    async def test_operator_mul_numpy(self):
+    def test_operator_mul_numpy(self):
         import numpy as np
         a = var(2)
         b = np.array([1, 2])
         res = a * b
         assert_array_equal(ev(res), np.array([2, 4]))
 
-    async def test_operator_cmp(self):
+    def test_operator_cmp(self):
         a = var(2)
         b = var(5)
         a_greater = a > b
@@ -34,7 +35,7 @@ class Forwarders(asynctest.TestCase):
         a @= 6
         self.assertTrue(ev(a_greater))
 
-    async def test_operator_neg(self):
+    def test_operator_neg(self):
         a = var(2)
         res = -a
         self.assertEqual(ev(res), -2)
@@ -42,7 +43,7 @@ class Forwarders(asynctest.TestCase):
         a @= -5
         self.assertEqual(ev(res), 5)
 
-    async def test_operator_assign_add(self):
+    def test_operator_assign_add(self):
         a = var(2)
         res = a + 5
         self.assertEqual(ev(res), 7)
@@ -51,7 +52,7 @@ class Forwarders(asynctest.TestCase):
         self.assertEqual(ev(a), 5)
         self.assertEqual(ev(res), 10)
 
-    async def test_operator_getitem_and_exception(self):
+    def test_operator_getitem_and_exception(self):
         a = var(('a', 'b'))
         res = a[1]
         self.assertEqual(ev(res), 'b')
@@ -71,7 +72,7 @@ class Forwarders(asynctest.TestCase):
         a @= (1, 2, 3)
         self.assertEqual(ev(res), 2)
 
-    async def test_operator_getitem_setitem_delitem(self):
+    def test_operator_getitem_setitem_delitem(self):
         a = var()
         res = a[1]
         with self.assertRaises(ArgEvalError):
@@ -86,7 +87,7 @@ class Forwarders(asynctest.TestCase):
         del a[1]
         self.assertEqual(ev(res), 3)
 
-    async def test_operator_var_index(self):
+    def test_operator_var_index(self):
         a = var()
         b = var()
         res = a[b]

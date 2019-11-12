@@ -72,7 +72,7 @@ def add_reactive_forwarders(cl: Any, functions: Iterable[Tuple[str, Callable]]):
 
             prefix = ''
             if hasattr(self, '__notifier__'):
-                preifx = self.__notifier__.name + '.'
+                preifx = self.__notifier__().name + '.'
             return reactive_f(self, *args)
 
         setattr(cl, name, wrapped)
@@ -89,7 +89,7 @@ def add_assignop_forwarders(cl: Any, functions: Iterable[Tuple[str, Callable]]):
     def add_one(cl: Any, name, func):
         def wrapped(self, arg1):
             target = self._target()
-            self_unwrapped = target.__eval__()
+            self_unwrapped = target.__eval__
             target.__assign__(func(self_unwrapped, arg1))
             return self
 
@@ -108,7 +108,7 @@ def add_notifying_forwarders(cl: Any, functions: Iterable[Tuple[str, Callable]])
         def wrapped(self, *args):
             target = self._target()
             self_unwrapped = target.__eval__()
-            with target.__notifier__:
+            with target.__notifier__():
                 res = func(self_unwrapped, *args)
             return res
 

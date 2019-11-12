@@ -3,7 +3,8 @@ from abc import abstractmethod
 from functools import wraps
 from math import ceil, floor
 
-from stateflow.common import T, ev_one, Observable
+from stateflow.common import T, Observable, assign
+from stateflow import ev_one
 from stateflow.decorators import reactive
 from stateflow.wrapping import add_assignop_forwarders, add_notifying_forwarders, add_reactive_forwarders
 
@@ -167,7 +168,7 @@ class MutatingForwarders(ForwardersBase):
         A fancy way to assign values to a variable ("v @= 5" instead of "v.__assign__(5)")
         """
         target = self._target()
-        target.__assign__(other)
+        assign(self, other)
         return self
 
 

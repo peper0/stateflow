@@ -4,6 +4,7 @@ from typing import Callable
 from stateflow.common import Observable, T, ev, is_observable
 from stateflow.decorators import reactive
 from stateflow.errors import NotInitializedError, ValidationError
+from stateflow.notifier import ACTIVE_NOTIFIER
 from stateflow.var import Const, NotifiedProxy, Var
 
 
@@ -28,12 +29,20 @@ def bind_vars(*vars):
 
 
 class VolatileProxy(NotifiedProxy[T]):
+    def __init__(self, inner):
+        super().__init__(inner)
+        self._notifier.add_observer(ACTIVE_NOTIFIER)
+        self._notify() # if notifier was active, the notify would not be called again
+
     def _notify(self):
         ev(self._inner)
 
 
 def volatile(var_or_callable):
-    if isinstance(var_or_callable, Callable):
+    # FIXME: to be rethinked
+    if is_observable(var_or_callable):
+        return VolatileProxy(var_or_callable)
+    elif isinstance(var_or_callable, Callable):
         func = var_or_callable
 
         @wraps(func)
@@ -45,8 +54,6 @@ def volatile(var_or_callable):
                 return res
 
         return wrapper
-    elif is_observable(var_or_callable):
-        return VolatileProxy(var)
     else:
         raise TypeError("argument type should be Callable or Observable (got {})".format(type(var_or_callable)))
 

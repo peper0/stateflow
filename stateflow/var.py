@@ -1,10 +1,17 @@
 from abc import abstractmethod
-from typing import Any, Union
 
-from stateflow.common import Observable, T, is_observable, assign
-from stateflow.errors import NotInitializedError, raise_need_async_eval
+from stateflow.common import Observable, T, assign, is_observable
+from stateflow.errors import FinalizedError, NotInitializedError
 from stateflow.forwarders import ConstForwarders, MutatingForwarders
 from stateflow.notifier import DummyNotifier, Notifier
+
+
+class NotInitialized:
+    pass
+
+
+NOT_INITIALIZED = type("NotInitialized", tuple(), {})
+FINALIZED = type("Finalized", tuple(), {})
 
 
 class Const(Observable[T], ConstForwarders):
@@ -19,12 +26,17 @@ class Const(Observable[T], ConstForwarders):
         super().__init__()
         self._value = value
 
-    @property
     def __notifier__(self):
         return self.dummy_notifier
 
     def __eval__(self) -> T:
+        if self._value == FINALIZED:
+            raise FinalizedError()
         return self._value
+
+    def __finalize__(self):
+        # it may be useful if we want to get rid of reference to the value, even in constant
+        self._value = FINALIZED
 
 
 class Proxy(Observable[T]):
@@ -34,17 +46,17 @@ class Proxy(Observable[T]):
 
     def __init__(self, inner: Observable[T]):
         super().__init__()
+        assert is_observable(inner)
         self._inner = inner
 
-    @property
     def __notifier__(self) -> Notifier:
-        return self._inner.__notifier__
+        return self._inner.__notifier__()
 
     def __eval__(self) -> T:
         return self._inner.__eval__()
 
-    async def __aeval__(self) -> T:
-        return await self._inner.__aeval__()
+    # async def __aeval__(self) -> T:
+    #     return await self._inner.__aeval__()
 
     def __assign__(self, value: T):
         self._inner.__assign__(value)
@@ -61,9 +73,8 @@ class NotifiedProxy(Proxy[T]):
     def __init__(self, inner: Observable[T]):
         super().__init__(inner)
         self._notifier = Notifier(self._notify)
-        self._inner.__notifier__.add_observer(self._notifier)
+        self._inner.__notifier__().add_observer(self._notifier)
 
-    @property
     def __notifier__(self):
         return self._notifier
 
@@ -73,7 +84,7 @@ class NotifiedProxy(Proxy[T]):
 
 class VarProxy(NotifiedProxy[T]):
     """
-    Like `Proxy` but the target `Observable` can be changed (i.e. replaces with another `Observable`). Notifies whenever
+    Like `Proxy` but the target `Observable` can be changed (i.e. replaced with another `Observable`). Notifies whenever
     the inner `Observable` notifies or when another `Observable` is assigned.
     """
 
@@ -88,10 +99,10 @@ class VarProxy(NotifiedProxy[T]):
             self._observe_value()
 
     def _unobserve_value(self):
-        return self._inner.__notifier__.remove_observer(self._notifier)
+        return self._inner.__notifier__().remove_observer(self._notifier)
 
     def _observe_value(self):
-        return self._inner.__notifier__.add_observer(self._notifier)
+        return self._inner.__notifier__().add_observer(self._notifier)
 
 
 class Var(Observable[T], ConstForwarders, MutatingForwarders):
@@ -99,29 +110,31 @@ class Var(Observable[T], ConstForwarders, MutatingForwarders):
     A simple `Observable` that holds a raw value that can be changed.
     """
 
-    class NotInitialized:
-        pass
-
-    NOT_INITIALIZED = NotInitialized()
     repr_name = 'Var'
+    NOT_INITIALIZED = NOT_INITIALIZED
 
     def __init__(self, value: T = NOT_INITIALIZED):
         super().__init__()
         self._value = value  # type: T
         self._notifier = Notifier()
 
-    @property
     def __notifier__(self) -> Notifier:
         return self._notifier
 
     def __eval__(self) -> T:
-        if self._value == self.NOT_INITIALIZED:
+        if self._value == NOT_INITIALIZED:
             raise NotInitializedError()
+        elif self._value == FINALIZED:
+            raise FinalizedError()
         return self._value
 
     def __assign__(self, value):
-        with self._notifier:
-            self._value = value
+        self._value = value
+        self._notifier.notify()
+
+    def __finalize__(self):
+        self._value = FINALIZED
+        # no notification here since this value should not be used anymore
 
 
 class CacheBase(Observable[T], ConstForwarders):
@@ -136,9 +149,8 @@ class CacheBase(Observable[T], ConstForwarders):
         self._cached_value = None
         self._cached_exception = None
         self._notifier = Notifier(self._invalidate_cache)
-        self._inner.__notifier__.add_observer(self._notifier)
+        self._inner.__notifier__().add_observer(self._notifier)
 
-    @property
     def __notifier__(self):
         return self._notifier
 
@@ -152,6 +164,9 @@ class CacheBase(Observable[T], ConstForwarders):
     @abstractmethod
     def __eval__(self) -> T:
         pass
+
+    def __finalize__(self) -> T:
+        return self._inner.__finalize__()
 
 
 class Cache(CacheBase[T]):
@@ -176,25 +191,25 @@ class Cache(CacheBase[T]):
             self._cache_is_valid = True
 
 
-class AsyncCache(CacheBase[T], ConstForwarders):
-    async def __aeval__(self):
-        await self._async_update_cache()
-        if self._cached_exception:
-            raise self._cached_exception
-        return self._cached_value
-
-    async def _async_update_cache(self):
-        if not self._cache_is_valid:
-            try:
-                self._cached_value = await self._inner.__aeval__()
-                self._cached_exception = None
-            except Exception as e:
-                self._cached_value = None
-                self._cached_exception = e
-            self._cache_is_valid = True
-
-    def __eval__(self):
-        raise_need_async_eval()
+# class AsyncCache(CacheBase[T], ConstForwarders):
+#     async def __aeval__(self):
+#         await self._async_update_cache()
+#         if self._cached_exception:
+#             raise self._cached_exception
+#         return self._cached_value
+#
+#     async def _async_update_cache(self):
+#         if not self._cache_is_valid:
+#             try:
+#                 self._cached_value = await self._inner.__aeval__()
+#                 self._cached_exception = None
+#             except Exception as e:
+#                 self._cached_value = None
+#                 self._cached_exception = e
+#             self._cache_is_valid = True
+#
+#     def __eval__(self):
+#         raise_need_async_eval()
 
 
 def as_observable(v):

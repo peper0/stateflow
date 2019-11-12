@@ -88,7 +88,7 @@ def get_default_refresher():
 
 
 def wait_for_var(var=None):
-    get_default_refresher().force_run(max_priority=var.__notifier__.priority if var is not None else None)
+    get_default_refresher().force_run(max_priority=var.__notifier__().priority if var is not None else None)
 
 
 class UpdateTransaction:

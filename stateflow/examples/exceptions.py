@@ -53,14 +53,14 @@ stateflow.errors.BodyEvalError: While evaluating function body at (most recent c
 <BLANKLINE>
 The above exception was the direct cause of the following exception:
 <BLANKLINE>
-stateflow.errors.ArgEvalError: While evaluating argument 'first_arg' of 'bar' instanced at (most recent call last):
+stateflow.errors.ArgEvalError: While evaluating argument 'first_arg' of 'bar' called at (most recent call last):
 ...
     b = bar(foo(a))
 <BLANKLINE>
 <BLANKLINE>
 The above exception was the direct cause of the following exception:
 <BLANKLINE>
-stateflow.errors.ArgEvalError: While evaluating argument 'first_arg' of 'bar' instanced at (most recent call last):
+stateflow.errors.ArgEvalError: While evaluating argument 'first_arg' of 'bar' called at (most recent call last):
 ...
     c = bar(b)
 <BLANKLINE>

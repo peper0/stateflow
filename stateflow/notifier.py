@@ -134,4 +134,35 @@ class Notifier:
             for observer in self._observers:
                 observer._set_priority_at_least(min_priority + 1)
 
+    def refresh(self):
+        refresh(self)
 
+
+ACTIVE_NOTIFIER = Notifier(forced_active=True)
+
+
+def refresh(*notifiers: Notifier):
+    """
+    Activates notifier for a moment, so if there is a call pending somewhere in (possibly indirectly) observed notifiers
+    whole chain is called.
+
+    :param notifiers:
+    :return:
+    """
+    assert ACTIVE_NOTIFIER not in notifiers
+    inactive_notifiers = [notifier for notifier in notifiers if not notifier.active]
+    for notifier in inactive_notifiers:
+        notifier.add_observer(ACTIVE_NOTIFIER)
+    for notifier in inactive_notifiers:
+        notifier.remove_observer(ACTIVE_NOTIFIER)
+
+# class ActiveNotifier:
+#     def __init__(self, notifier: Notifier):
+#         self._notifier = notifier
+#         self._active_notifier = Notifier(forced_active=True)
+#
+#     def __enter__(self):
+#         self._notifier.add_observer(self._active_notifier)
+#
+#     def __exit__(self, exc_type, exc_val, exc_tb):
+#         self._notifier.remove_observer(self._active_notifier)
