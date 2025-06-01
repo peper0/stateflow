@@ -12,3 +12,19 @@
 - xx"shared_retval" zwraca var który jest zwracany jako wartość wyjściowa i który będzie ustawiany na wartość zwróconą z tego wywołania; wszystkie poprzednie
 - "override" - zwraca pudełko, do którego będzie wpisany ten call result, a jeśli był tam jakiś inny, to jest finalizowany przed wywołaniem funkcji
 - hold_active(var, condition: var_or_bool)
+
+
+* case1:
+** tworzymy plot(window, label)
+** tworzymy nowy plot z identycznymi argumentami
+** przed pierwszym wywołaniem tego drugiego trzeba zcleanupować to pierwsze
+** mogą oba zwracać to samo, albo ten pierwszy może zwrócić wyjątek
+* case2:
+** tworzymy plot(var_window, label) - var_window się może zmieniać
+** zmiana var cleanupuje pierwsze wywołanie i robi drugie
+* case3:
+** tworzymy plot(window, label)
+** tworzymy plot(var_window, label) - var_window się może zmieniać, na początku var_window != window
+** var_window po jakimś czasie robi się == window
+** w momencie przełączenia cleanupujemy zarówno pierwsze wywołanie jak i drugie
+** potem var_window zmienia się na inne - czy przywracamy to pierwsze?
