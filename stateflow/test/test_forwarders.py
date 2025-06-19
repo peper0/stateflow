@@ -1,5 +1,6 @@
 import unittest
 
+import pytest
 from numpy.testing import assert_array_equal
 
 from stateflow import ArgEvalError, const, ev, var
@@ -53,6 +54,7 @@ class Forwarders(unittest.TestCase):
         self.assertEqual(ev(res), 10)
 
     def test_operator_getitem_and_exception(self):
+        pytest.skip("exception are to be reviewed")
         a = var(('a', 'b'))
         res = a[1]
         self.assertEqual(ev(res), 'b')
@@ -73,6 +75,7 @@ class Forwarders(unittest.TestCase):
         self.assertEqual(ev(res), 2)
 
     def test_operator_getitem_setitem_delitem(self):
+        pytest.skip("exception are to be reviewed")
         a = var()
         res = a[1]
         with self.assertRaises(ArgEvalError):

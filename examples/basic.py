@@ -2,6 +2,7 @@
 Operators
 ~~~~~~~~~~~~~~~~
 Let's start with a trivial example.
+
 >>> from stateflow import var, assign
 >>> a = var(1)
 >>> b = var(2)
@@ -23,6 +24,7 @@ Functions
 ~~~~~~~~~~~~~~~~
 If we want to declare a derived variable that cannot be computed using simple operators, the `reactive` decorator may be
 helpful. Inside this function `a` and `b` are ordinary variables.
+
 >>> from stateflow import var, reactive
 >>> a = var(1)
 >>> b = var(2)

@@ -6,15 +6,15 @@ from typing import Any, NamedTuple
 
 import sys
 
-stderr_logger_handler = logging.StreamHandler(stream=sys.stderr)
-stderr_logger_handler.setLevel(logging.DEBUG)
-logger = logging.getLogger('notify')
-logger.addHandler(stderr_logger_handler)
-logger.setLevel(logging.INFO)
+# stderr_logger_handler = logging.StreamHandler(stream=sys.stderr)
+# stderr_logger_handler.setLevel(logging.DEBUG)
+logger = logging.getLogger('refresher')
+# logger.addHandler(stderr_logger_handler)
+# logger.setLevel(logging.INFO)
 
 
 class QueueItem(NamedTuple):
-    priority: int
+    priority: int  # lower priority is called first
     id: Any  # FIXME: remove id (callable MUST be hashable, we use wrapper if it isn't)
     notifier: 'Notifier'
     stats: dict

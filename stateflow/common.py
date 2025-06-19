@@ -7,6 +7,7 @@ from stateflow.errors import ArgEvalError, BodyEvalError, EvError, NotAssignable
 
 FULL_TRACEBACKS = False
 REPR_EVALUATES = False
+deprecated_interactive_mode = False
 
 
 def ensure_coro_func(f):
@@ -20,7 +21,6 @@ def ensure_coro_func(f):
 
 
 CoroutineFunction = Callable[..., Coroutine]
-
 MaybeAsyncFunction = Union[Callable, CoroutineFunction]
 NotifyFunc = Union[Callable[[], None], Callable[[], Coroutine]]
 
@@ -70,6 +70,7 @@ class Observable(Generic[T]):
             return f'{self.repr_name}({repr(val)})'
 
 
+
 # async def aev_strict(v: Observable[T]) -> T:
 #     return await v.__aeval__()
 #
@@ -115,11 +116,12 @@ def ev_one(v: Observable[T]) -> T:
     assert is_observable(v)
     # BodyEvalError and ArgEvalError are handled in a special way to
     try:
-        v.__notifier__().refresh()
+        v.__notifier__().refresh()  # FIXME: why do we need this? shouldn't eval force to evaluate
         return v.__eval__()
     except BodyEvalError as e:
         # hide a part of stack from here to the place where BodyEvalError was raised
         raise EvError() from e.with_traceback(None)
     except ArgEvalError as e:
         raise EvError() from e.with_traceback(None)
+
 

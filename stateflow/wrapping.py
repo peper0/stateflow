@@ -6,7 +6,7 @@ from stateflow.notifier import Notifier
 
 
 def get_subnotifier(self: Notifier, name: str) -> Notifier:
-    if name is None or name is '':
+    if not name:
         return self.__notifier__
     if not hasattr(self, '_subnotifiers'):
         setattr(self, '_subnotifiers', dict())
@@ -66,9 +66,8 @@ def add_reactive_forwarders(cl: Any, functions: Iterable[Tuple[str, Callable]]):
 
     def add_one(cl: Any, name, func):
         def wrapped(self, *args):
-            @reactive  # fixme: we should rather forward to the _target, not to __eval__
-            def reactive_f(self_unwrapped, *args):
-                return func(self_unwrapped, *args)
+              # fixme: we should rather forward to the _target, not to __eval__
+            reactive_f = reactive(func)
 
             prefix = ''
             if hasattr(self, '__notifier__'):
@@ -89,7 +88,7 @@ def add_assignop_forwarders(cl: Any, functions: Iterable[Tuple[str, Callable]]):
     def add_one(cl: Any, name, func):
         def wrapped(self, arg1):
             target = self._target()
-            self_unwrapped = target.__eval__
+            self_unwrapped = target.__eval__()
             target.__assign__(func(self_unwrapped, arg1))
             return self
 

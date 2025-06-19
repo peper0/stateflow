@@ -32,6 +32,7 @@ class VolatileProxy(NotifiedProxy[T]):
     def __init__(self, inner):
         super().__init__(inner)
         self._notifier.add_observer(ACTIVE_NOTIFIER)
+        self._notifier.name = "Volatile"
         self._notify() # if notifier was active, the notify would not be called again
 
     def _notify(self):

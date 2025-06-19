@@ -117,6 +117,7 @@ class Var(Observable[T], ConstForwarders, MutatingForwarders):
         super().__init__()
         self._value = value  # type: T
         self._notifier = Notifier()
+        self._notifier.name = f'Var[{type(value).__name__}]'
 
     def __notifier__(self) -> Notifier:
         return self._notifier
@@ -150,6 +151,7 @@ class CacheBase(Observable[T], ConstForwarders):
         self._cached_exception = None
         self._notifier = Notifier(self._invalidate_cache)
         self._inner.__notifier__().add_observer(self._notifier)
+        self._notifier.name = f'Cache'
 
     def __notifier__(self):
         return self._notifier

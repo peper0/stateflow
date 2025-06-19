@@ -5,11 +5,12 @@ import sys
 from contextlib import suppress
 from typing import Any, NamedTuple
 
-stderr_logger_handler = logging.StreamHandler(stream=sys.stderr)
-stderr_logger_handler.setLevel(logging.DEBUG)
-logger = logging.getLogger('notify')
-logger.addHandler(stderr_logger_handler)
-logger.setLevel(logging.INFO)
+#FIXME: remove this logging configuration
+# stderr_logger_handler = logging.StreamHandler(stream=sys.stderr)
+# stderr_logger_handler.setLevel(logging.DEBUG)
+logger = logging.getLogger('refresher')
+# logger.addHandler(stderr_logger_handler)
+# logger.setLevel(logging.INFO)
 
 
 class QueueItem(NamedTuple):

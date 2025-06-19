@@ -106,11 +106,11 @@ assign
 >>> repr(a)
 'Var(2)'
 
-reactive_finalizable
+a function with finalization
 ~~~~~~~~~~~~~~~~
->>> from stateflow import reactive_finalizable
+>>> from stateflow import reactive
 >>>
->>> @reactive_finalizable
+>>> @reactive
 ... def foo(a):
 ...     print("initialized with {}".format(a))
 ...     yield "something with {}".format(a)

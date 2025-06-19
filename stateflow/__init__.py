@@ -1,12 +1,12 @@
 name = "stateflow"
 
 from stateflow.common import Observable, assign, ev, ev_def, ev_exception, ev_one
-from stateflow.decorators import reactive, reactive_finalizable
+from stateflow.decorators import reactive
 from stateflow.errors import ArgEvalError, BodyEvalError, NotAssignable, NotInitializedError, ValidationError, EvError
 from stateflow.notifier import Notifier
 from stateflow.utils import *
 
-__all__ = ['Observable', 'assign', 'ev', 'ev_def', 'ev_exception', 'ev_one', 'reactive', 'reactive_finalizable',
+__all__ = ['Observable', 'assign', 'ev', 'ev_def', 'ev_exception', 'ev_one', 'reactive',
            'ArgEvalError', 'BodyEvalError', 'NotAssignable', 'NotInitializedError', 'ValidationError', 'EvError',
            'Notifier']
 

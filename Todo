@@ -1,3 +1,35 @@
+czy na pewno reactive na funkcji z yieldem powinien traktować ją specjalnie? a co jak ktoś zawoła tę funkcję z niereaktywnymi parametrami?
+
+- [x] projekt jest zarządzany przez pdm
+- [x] mamy doca do: budowania, testowania, publikowania
+- [ ] github budje i testuje projekt (i testy przechodzą)
+- [ ] ruff do formatowania + readme + sprawdzenie na gicie
+- [ ] jakaś zbiorcza komenda (w pdm?) do uruchomienia wszystkich testów
+- [ ] mypy: lokalnie, readme, na githubie i żeby przezchodziło
+- [ ] example użycia: uruchamiane w czasie testów i wrzucane do doca sphinxowego (czy są gotowe rozwiązania? jak nie to zrobić proste skrypty)
+- [ ] poprawić TODO w testach
+- zrobić example użycia i todo bazujące na tym (patrz też milestone poniżej)
+- pogadać z czatem o nazewnictwie (np notifier, var, etc)
+- wypisać API w stateflow
+- wprowadzić glosariusz i ustalić z chatemgpt terminologię (jakiś canvas?)
+
+MILESTONE 1:
+- [ ] obsługa synchronicznych funkcji
+- [ ] var,  const
+- [ ] reactive(), które wybiera najsensowniejszy wrapper i działa dla funkcji, zmiennych (stałych), modułów itp.
+- [ ] funkcja do ewaluacji (z obsługą też niereaktywnych zmiennych)
+- [ ] funkcja z finalizatorem
+- [ ] działanie operatorów niemutujących
+- [ ] rozsądne wypisywanie błędów
+- [ ] wybieranie zmienną globalną, czy wyjątek z wywołania przy bindowaniu ma wylecieć, czy tylko się wypisać, czy tylko być przekazany
+- [ ] zmienna globalna decudująca, czy wyjątki mają się wypisywać na konsolę
+
+MILESTONE 2:
+- [ ] obsługa metainformacji dla metod wrapowanych klas
+- [ ] obsługa metod setterów (binduje do ostatniego wywołania)
+- [ ] obsługa metod mutujących (nie binduje wcale) 
+
+- rethink __eval__ vs refresh (is it really eval? or rather get_value?)
 - test some diamond-like structure of vars and check if everything is computed only once and only if active
 
 - var ma notifiera
@@ -5,6 +37,7 @@
 - jeśli notifier nie jest active, to tylko oznacza się jako "pending"
 - notifier ma licznik observerów, którzy są active i jest active iif ten licznik jest >0
 - sinki są specjalnymi observerami, którzy są active
+
 - dekorator funkcji ma parametry "side_effects" i "sinks"
 - "side effects" to funkcja biorąca parametry te same co funkcja dekorowana (bez unwrapowania) i zwracająca notifiery, które mają być dodatkowo powiadomione
 - "additional deps" zwraca dodatkowe notifiery
@@ -28,3 +61,5 @@
 ** var_window po jakimś czasie robi się == window
 ** w momencie przełączenia cleanupujemy zarówno pierwsze wywołanie jak i drugie
 ** potem var_window zmienia się na inne - czy przywracamy to pierwsze?
+
+

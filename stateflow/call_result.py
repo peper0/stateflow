@@ -3,12 +3,13 @@ import logging
 import traceback
 from abc import abstractmethod
 from itertools import chain
-from typing import Any, Dict, List, Set, Tuple, Callable
+from typing import Any, Dict, List, Mapping, Sequence, Set, Tuple, Callable
 
 from stateflow.common import Observable, T, ev, is_observable
-from stateflow.decorators import DecoratedFunction
 from stateflow.errors import ArgEvalError, BodyEvalError, raise_need_async_eval, EvError
+from stateflow.internal_utils import bind_arguments
 from stateflow.notifier import Notifier
+
 
 
 class ArgsHelper:
@@ -16,14 +17,12 @@ class ArgsHelper:
         if signature:
             # support default parameters
             try:
-                bound_args = signature.bind(*args, **kwargs)  # type: inspect.BoundArguments
-                bound_args.apply_defaults()
+                self.args, self.kwargs = bind_arguments(signature, args, kwargs)
             except Exception as e:
                 raise Exception('during binding {}{}'.format(callable.__name__, signature)) from e
             args_names = list(signature.parameters)
 
-            self.args = bound_args.args
-            self.kwargs = bound_args.kwargs
+
             self.args_names = args_names[0:len(self.args)]
             self.args_names += [None] * (len(self.args) - len(self.args_names))
             self.kwargs_indices = [(args_names.index(name) if name in args_names else None)
@@ -83,12 +82,17 @@ def callable_name(c: Callable):
         "<unknown>"
 
 class CallResult(Observable[T]):
-    def __init__(self, decorated: DecoratedFunction, args, kwargs):
-        self.decorated = decorated  # type: DecoratedFunction
+    """
+    An observable that represents the result of a reactive function call. It will be updated when the function's
+    arguments change.
+    """
+    def __init__(self, reactive_function: 'ReactiveFunction', args, kwargs):
+        self.reactive_function = reactive_function
         self._notifier = Notifier()
+        self._notifier.name = 'CallResult of {}'.format(callable_name(reactive_function.callable))
 
         # use dep_only_args
-        for name in decorated.decorator.dep_only_args:
+        for name in reactive_function.decorator_params.dep_only_args:
             if name in kwargs:
                 arg = kwargs.pop(name)
 
@@ -99,17 +103,17 @@ class CallResult(Observable[T]):
                     observe(arg, self.__notifier__())
 
         # use other_deps
-        for dep in decorated.decorator.other_deps:
+        for dep in reactive_function.decorator_params.other_deps:
             maybe_observe(dep, self.__notifier__())
 
-        self.args_helper = ArgsHelper(args, kwargs, decorated.signature, decorated.callable)
+        self.args_helper = ArgsHelper(args, kwargs, reactive_function.signature, reactive_function.callable)
         self.args = self.args_helper.args
         self.kwargs = self.args_helper.kwargs
         self._update_in_progress = False
 
         self.call_stack = traceback.extract_stack()[:-3]
 
-        observe_args(self.args_helper, self.decorated.decorator.pass_args, self.__notifier__())
+        observe_args(self.args_helper, self.reactive_function.decorator_params.pass_args, self.__notifier__())
 
     def __notifier__(self):
         return self._notifier
@@ -141,14 +145,14 @@ class CallResult(Observable[T]):
         :raise BodyEvalError or ArgEvalError. Other exceptions are kind of internal error.
         """
         assert self._update_in_progress == False, 'circular dependency containing "{}" called at:\n{}'.format(
-            callable_name(self.decorated.callable), self.call_stack)
+            callable_name(self.reactive_function.callable), self.call_stack)
         try:
             self._update_in_progress = True
-            args, kwargs = eval_args(self.args_helper, self.decorated.decorator.pass_args,
-                                     callable_name(self.decorated.callable), self.call_stack)
+            args, kwargs = eval_args(self.args_helper, self.reactive_function.decorator_params.pass_args,
+                                     callable_name(self.reactive_function.callable), self.call_stack)
 
             try:
-                return self.decorated.really_call(args, kwargs)
+                return self.reactive_function.really_call(args, kwargs)
             except Exception as e:
                 raise BodyEvalError(self.call_stack, e.with_traceback(e.__traceback__.tb_next.tb_next))
         finally:

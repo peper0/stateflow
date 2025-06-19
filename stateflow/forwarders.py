@@ -3,9 +3,8 @@ from abc import abstractmethod
 from functools import wraps
 from math import ceil, floor
 
-from stateflow.common import T, Observable, assign
-from stateflow import ev_one
 from stateflow.decorators import reactive
+from stateflow.common import T, Observable, assign, ev_one
 from stateflow.wrapping import add_assignop_forwarders, add_notifying_forwarders, add_reactive_forwarders
 
 UNARY_OPERATORS = [
