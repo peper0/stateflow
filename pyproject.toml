@@ -1,0 +1,29 @@
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[project]
+name = "stateflow"
+version = "0.0.2"
+description = "A state-propagation framework."
+readme = "README.md"
+authors = [
+    { name = "Tomasz Łakota", email = "tomasz@lakota.pl" }
+]
+license = { text = "MIT" }
+requires-python = ">=3.0"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent"
+]
+urls = { Homepage = "https://github.com/peper0/stateflow" }
+
+[tool.pdm]
+# PDM-specific settings can be added here if needed
+
+[tool.pdm.dev-dependencies]
+# Example: test = ["pytest"]
+
+[tool.pdm.build]
+includes = ["stateflow"]
