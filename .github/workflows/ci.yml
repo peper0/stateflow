@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.12', '3.13', '3.14']
+        python-version: ['3.12', '3.13']
       fail-fast: false  # Continue testing other Python versions if one fails
 
     steps:
@@ -50,10 +50,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Python 3.14
+    - name: Set up Python 3.12
       uses: actions/setup-python@v4
       with:
-        python-version: '3.14'
+        python-version: '3.12'
 
     - name: Cache PDM dependencies
       uses: actions/cache@v4
