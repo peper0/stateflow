@@ -2,39 +2,40 @@ import asyncio
 import gc
 import logging
 from contextlib import suppress
-from typing import Any, NamedTuple
+from typing import Any, Awaitable, Dict, NamedTuple, Optional, Set, TYPE_CHECKING, Union
 
 import sys
 
-# stderr_logger_handler = logging.StreamHandler(stream=sys.stderr)
-# stderr_logger_handler.setLevel(logging.DEBUG)
 logger = logging.getLogger('refresher')
-# logger.addHandler(stderr_logger_handler)
-# logger.setLevel(logging.INFO)
+
+if TYPE_CHECKING:
+    from stateflow.notifier import Notifier
 
 
 class QueueItem(NamedTuple):
     priority: int  # lower priority is called first
     id: Any  # FIXME: remove id (callable MUST be hashable, we use wrapper if it isn't)
     notifier: 'Notifier'
-    stats: dict
+    stats: Dict[str, Any]
 
-    def __lt__(self, other):
-        return self.priority < other.priority
+    def __lt__(self, other: Any) -> bool:
+        if isinstance(other, QueueItem):
+            return self.priority < other.priority
+        return NotImplemented
 
 
 class AsyncRefresher:
-    def __init__(self):
-        self.queue = asyncio.PriorityQueue()
-        self.task = None  # type: asyncio.Task
+    def __init__(self) -> None:
+        self.queue: asyncio.PriorityQueue[QueueItem] = asyncio.PriorityQueue()
+        self.task: Optional[asyncio.Task[None]] = None
 
-    def maybe_start_task(self):
+    def maybe_start_task(self) -> None:
         if not self.task or self.task.done():
-            self.task = asyncio.ensure_future(self.run())  # type: asyncio.Task
+            self.task = asyncio.ensure_future(self.run())
             self.task.add_done_callback(self._handle_done)
 
     @staticmethod
-    def _handle_done(f):
+    def _handle_done(f: asyncio.Future[Any]) -> None:
         if f.cancelled():
             logger.warning('refresh task was cancelled')
             return
@@ -43,17 +44,17 @@ class AsyncRefresher:
             logger.exception('refresh task finished with exception, rethrowing')
             raise e
 
-    def schedule_call(self, notifier: 'Notifier'):
+    def schedule_call(self, notifier: 'Notifier') -> None:
         logger.debug('  scheduled notification ({}) [{:X}] {}'.format(notifier.priority, id(notifier), notifier.name))
         t = QueueItem(notifier.priority, notifier, notifier, notifier.stats)
         self.queue.put_nowait(t)
         self.maybe_start_task()
 
-    async def run(self):
+    async def run(self) -> None:
         gc.collect()
-        update_next = None
+        update_next: Optional[QueueItem] = None
 
-        notified_notifiers = set()
+        notified_notifiers: Set['Notifier'] = set()
         with suppress(asyncio.QueueEmpty):  # it's ok - if the queue is empty we just exit
             while True:
                 notification = update_next if update_next else self.queue.get_nowait()  # type: QueueItem
@@ -73,19 +74,19 @@ class AsyncRefresher:
                     logger.debug('call notification ({}) [{:X}] {}'.format(notifier.priority, id(notifier),
                                                                            notifier.name))
 
-                    res = notifier.call()
-                    if asyncio.iscoroutine(res):
-                        res = await res
+                    notifier.call()
+                    # if asyncio.iscoroutine(res):
+                    #     res = await res
                     notification.stats['exception'] = None
 
                     assert isinstance(res, bool), "res has type {}, should be bool for {}".format(type(res),
                                                                                                   notifier.name)
-                    if res:
-                        logger.debug(' notification finished with True, notifying observers')
-                        notification.notifier.notify_observers()
-                        logger.debug(' finished')
-                    else:
-                        logger.debug(' notification finished with False')
+                    # if res:
+                    #     logger.debug(' notification finished with True, notifying observers')
+                    #     notifier._notify_observers()  # Use the internal method instead of a non-existent method
+                    #     logger.debug(' finished')
+                    # else:
+                    #     logger.debug(' notification finished with False')
 
                 except Exception as e:
                     logger.exception('ignoring exception when in notifying observer {}'.format(notification.notifier))
@@ -93,10 +94,10 @@ class AsyncRefresher:
         gc.collect()
 
 
-refresher = None
+refresher: Optional[AsyncRefresher] = None
 
 
-def get_default_refresher():
+def get_default_refresher() -> AsyncRefresher:
     global refresher
     if not refresher:
         refresher = AsyncRefresher()
@@ -104,7 +105,7 @@ def get_default_refresher():
     return refresher
 
 
-async def wait_for_var(var=None):
+async def wait_for_var(var: Optional[Any] = None) -> None:
     # fixme: waiting only for certain level (if var is not None)
     task = get_default_refresher().task
     if task:

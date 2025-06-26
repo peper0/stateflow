@@ -2,19 +2,19 @@ import abc
 import logging
 import weakref
 from _weakrefset import WeakSet
-from typing import Set
+from typing import Any, Callable, Coroutine, Optional, Set, TypeVar, Union, cast
 
 from stateflow.common import NotifyFunc
 from stateflow.sync_refresher import get_default_refresher
 
 logger = logging.getLogger('notify')
 
-all_notifiers = WeakSet()
+all_notifiers: WeakSet = WeakSet()
 
 _got_finals = 0
 
 
-def is_hashable(v):
+def is_hashable(v: Any) -> bool:
     """Determine whether `v` can be hashed."""
     try:
         hash(v)
@@ -23,7 +23,7 @@ def is_hashable(v):
     return True
 
 
-def is_notify_func(notify_func):
+def is_notify_func(notify_func: Any) -> bool:
     return is_hashable(notify_func) and hasattr(notify_func, '__call__')
 
 
@@ -40,15 +40,17 @@ class INotifier(abc.ABC):
     A notifier has a priority, which is used to determine the order of notifications. The priority is an integer, where
     lower numbers are called first. The priority of the notifier is always greater than the priority of all its observers.
     """
+    name: str = ""
 
     @abc.abstractmethod
-    def notify(self):
+    def notify(self) -> None:
+        
         """Notify the notifier that the related object should be updated (and all dependents). """
         ...
 
     # FIXME rename to "call_update"?
     @abc.abstractmethod
-    def call(self):
+    def call(self) -> bool:
         """Call the update callback in the related object and notify active dependents."""
         ...
 
@@ -65,16 +67,16 @@ class INotifier(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def add_observer(self, observer: 'INotifier'):
+    def add_observer(self, observer: 'INotifier') -> None:
         """Add an observer to this notifier. It fill be notified when this notifier is called"""
         ...
 
     @abc.abstractmethod
-    def remove_observer(self, observer: 'INotifier'):
+    def remove_observer(self, observer: 'INotifier') -> None:
         """Remove an observer from this notifier. It will not be notified anymore."""
         ...
 
-    def refresh(self):
+    def refresh(self) -> None:
         refresh_notifiers(self)
 
 class DummyNotifier(INotifier):
@@ -82,18 +84,18 @@ class DummyNotifier(INotifier):
         self._priority = priority
         self.name = 'dummy'
 
-    def notify(self):
+    def notify(self) -> None:
         pass
 
-    def call(self):
-        pass
+    def call(self) -> bool:
+        return False
 
     @property
-    def priority(self):
+    def priority(self) -> int:
         return self._priority
 
     @property
-    def active(self):
+    def active(self) -> bool:
         return False
 
     def add_observer(self, observer: INotifier) -> None:
@@ -102,7 +104,7 @@ class DummyNotifier(INotifier):
     def remove_observer(self, observer: INotifier) -> None:
         return
 
-    def refresh(self):
+    def refresh(self) -> None:
         return
 
 
@@ -110,15 +112,15 @@ class DummyNotifier(INotifier):
 class Notifier(INotifier):
 
 
-    def __init__(self, notify_func: NotifyFunc = lambda: True, forced_active=False, name=""):
+    def __init__(self, notify_func: NotifyFunc = lambda: True, forced_active: bool = False, name: str = "") -> None:
         """
         Arguments:
             notify_func: A function that will be called when one of the observed notifiers is changed.
             forced_active: If True, this notifier is always active, even if there are no active observers.
         """
-        self._observers: Set[Notifier] = weakref.WeakSet()
-        self._active_observers: Set[Notifier] = weakref.WeakSet()
-        self._observed: Set[Notifier] = weakref.WeakSet()
+        self._observers: Set['Notifier'] = weakref.WeakSet()
+        self._active_observers: Set['Notifier'] = weakref.WeakSet()
+        self._observed: Set['Notifier'] = weakref.WeakSet()
 
         self._priority = 0  # lowest called first; should be greater than all observed
 
@@ -131,15 +133,15 @@ class Notifier(INotifier):
         assert is_notify_func(notify_func)
         self.notify_func = notify_func
         self.calls = 0
-        self.stats = dict()
+        self.stats: dict[str, Any] = dict()
         self.frame = None
         all_notifiers.add(self)
 
-    def notify(self):
+    def notify(self) -> None:
         logger.debug(f"Notifier notified: {self}")
         get_default_refresher().schedule_call(self)
 
-    def call(self):
+    def call(self) -> None:
         logger.debug(f"Notifier called: {self}")
         self.calls += 1
         if self.active:
@@ -153,7 +155,7 @@ class Notifier(INotifier):
         for observer in self._observers:  # fixme: shouldn't we use _active_observers here?
             observer.notify()
 
-    def add_observer(self, observer: 'Notifier'):
+    def add_observer(self, observer: 'Notifier') -> None:
         """
         :param observer: A notifier that will be notified (WARNING! it must be owned somewhere else; it's especially
                        important for bound methods or partially bound functions). It must be hashable and equality
@@ -167,22 +169,22 @@ class Notifier(INotifier):
         if observer.active:
             self._add_to_active(observer)
 
-    def _add_to_active(self, observer):
+    def _add_to_active(self, observer: 'Notifier') -> None:
         self._active_observers.add(observer)
         self._update_active()
 
-    def remove_observer(self, observer: 'Notifier'):
+    def remove_observer(self, observer: 'Notifier') -> None:
         assert observer in self._observers
         self._observers.remove(observer)
         observer._observed.remove(self)
         if observer in self._active_observers:
             self._remove_from_active(observer)
 
-    def _remove_from_active(self, observer):
+    def _remove_from_active(self, observer: 'Notifier') -> None:
         self._active_observers.remove(observer)
         self._update_active()
 
-    def _update_active(self):
+    def _update_active(self) -> None:
         """
         My active state might have changed, so I may need to readd myself to observed notifiers (or they wouldn't know
         someone active is observing them)
@@ -200,21 +202,21 @@ class Notifier(INotifier):
                 self.notify()
 
     @property
-    def priority(self):
+    def priority(self) -> int:
         return self._priority
 
     @property
-    def active(self):
+    def active(self) -> bool:
         # self._update_active()
         return self._is_active
 
-    def _set_priority_at_least(self, min_priority):
+    def _set_priority_at_least(self, min_priority: int) -> None:
         if self._priority < min_priority:
             self._priority = min_priority
             for observer in self._observers:
                 observer._set_priority_at_least(min_priority + 1)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<Notifier name={self.name} id={id(self):x} priority={self.priority} active={self.active}>"
 
 
@@ -222,7 +224,7 @@ class Notifier(INotifier):
 ACTIVE_NOTIFIER = Notifier(forced_active=True, name="ACTIVE")
 
 
-def refresh_notifiers(*notifiers: Notifier):
+def refresh_notifiers(*notifiers: Notifier) -> None:
     """
     Activates notifier for a moment, so if there is a call pending somewhere in (possibly indirectly) observed notifiers
     whole chain is called.
@@ -234,7 +236,7 @@ def refresh_notifiers(*notifiers: Notifier):
     for notifier in inactive_notifiers:
         notifier.remove_observer(ACTIVE_NOTIFIER)
 
-def dump_notifiers_to_dot(notifier: INotifier, filename: str = 'notifiers.dot'):
+def dump_notifiers_to_dot(notifier: INotifier, filename: str = 'notifiers.dot') -> None:
     """
     Dumps the notifier graph to a dot file.
     """
@@ -242,17 +244,17 @@ def dump_notifiers_to_dot(notifier: INotifier, filename: str = 'notifiers.dot'):
 
     graph = pydot.Dot(graph_type='digraph')
 
-    def add_node(n: INotifier):
+    def add_node(n: INotifier) -> Any:
         node = pydot.Node(str(id(n)), label=n.name, shape='box', style="dashed" if not n.active else "solid")
         graph.add_node(node)
         return node
 
-    def add_edge(from_node, to_node):
+    def add_edge(from_node: Any, to_node: Any) -> None:
         edge = pydot.Edge(from_node, to_node)
         graph.add_edge(edge)
 
-    nodes = {}
-    def traverse(n: INotifier):
+    nodes: dict[INotifier, Any] = {}
+    def traverse(n: INotifier) -> None:
         if n in nodes:
             return
         nodes[n] = add_node(n)

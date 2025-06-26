@@ -1,6 +1,6 @@
 import asyncio
 from abc import abstractmethod
-from typing import Callable, Coroutine, Generic, TypeVar, Union
+from typing import Any, Callable, Coroutine, Generic, Optional, Protocol, TypeVar, Union, cast, runtime_checkable
 
 from stateflow.errors import ArgEvalError, BodyEvalError, EvError, NotAssignable
 
@@ -10,19 +10,30 @@ REPR_EVALUATES = False
 deprecated_interactive_mode = False
 
 
-def ensure_coro_func(f):
+@runtime_checkable
+class Notifier(Protocol):
+    def refresh(self) -> None: ...
+
+
+R = TypeVar('R')
+S = TypeVar('S')
+
+
+def ensure_coro_func(f: Callable[..., R]) -> Callable[..., Coroutine[Any, Any, R]]:
     if asyncio.iscoroutinefunction(f):
-        return f
+        return cast(Callable[..., Coroutine[Any, Any, R]], f)
     elif hasattr(f, '__call__'):
-        async def async_f(*args, **kwargs):
+        async def async_f(*args: Any, **kwargs: Any) -> R:
             return f(*args, **kwargs)
 
         return async_f
+    else:
+        raise TypeError(f"Expected callable, got {type(f)}")
 
 
-CoroutineFunction = Callable[..., Coroutine]
-MaybeAsyncFunction = Union[Callable, CoroutineFunction]
-NotifyFunc = Union[Callable[[], None], Callable[[], Coroutine]]
+CoroutineFunction = Callable[..., Coroutine[Any, Any, Any]]
+MaybeAsyncFunction = Union[Callable[..., R], Callable[..., Coroutine[Any, Any, R]]]
+NotifyFunc = Union[Callable[[], None], Callable[[], Coroutine[Any, Any, None]]]
 
 T = TypeVar('T')
 
@@ -31,7 +42,7 @@ class Observable(Generic[T]):
     repr_name = 'Observable'
 
     @abstractmethod
-    def __notifier__(self) -> 'Notifier':
+    def __notifier__(self) -> Notifier:
         """
         A notifier, that will notify whenever a reactive function that used this object should be called again.
         """
@@ -47,17 +58,17 @@ class Observable(Generic[T]):
         pass
 
     @abstractmethod
-    def __assign__(self, value: T):
+    def __assign__(self, value: T) -> None:
         raise NotAssignable()
 
-    def __finalize__(self):
+    def __finalize__(self) -> None:
         """
         Declare that this observable will be never used again.
         :return:
         """
         pass
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         try:
             if REPR_EVALUATES:
                 self.__notifier__().refresh()
@@ -77,11 +88,12 @@ class Observable(Generic[T]):
 
 def ev(v: Union[T, Observable[T]]) -> T:
     while is_observable(v):
+        v = cast(Observable[T], v)
         v = ev_one(v)
     return v
 
 
-def ev_exception(v):
+def ev_exception(v: Any) -> Optional[EvError]:
     try:
         _ = ev(v)
         return None
@@ -89,22 +101,22 @@ def ev_exception(v):
         return e
 
 
-def ev_def(v, val_on_exception=None):
+def ev_def(v: Any, val_on_exception: Any = None) -> Any:
     try:
         return ev(v)
     except EvError as e:
         return val_on_exception
 
 
-def assign(var: Observable[T], val: T):
+def assign(var: Observable[T], val: T) -> None:
     var.__assign__(val)
 
 
-def finalize(var: Observable[T]):
+def finalize(var: Observable[T]) -> None:
     var.__finalize__()
 
 
-def is_observable(v):
+def is_observable(v: Any) -> bool:
     """
     Check whether given object should be considered as "observable" i.e. the object that manages notifiers internally
     and returns observable objects from it's methods.
@@ -123,5 +135,3 @@ def ev_one(v: Observable[T]) -> T:
         raise EvError() from e.with_traceback(None)
     except ArgEvalError as e:
         raise EvError() from e.with_traceback(None)
-
-
