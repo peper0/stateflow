@@ -24,12 +24,13 @@ dependencies = ["pydot>=4.0.1", "typing-extensions>=4.14.0"]
 # PDM-specific settings can be added here if needed
 
 [tool.pdm.dev-dependencies]
-test = ["pytest>=7.0.0", "pytest-cov>=4.0.0", "numpy"]
+test = ["pytest>=7.0.0", "pytest-cov>=4.0.0", "numpy", "mypy>=1.16.1"]
 
 [tool.pdm.scripts]
 test = "pytest stateflow/test/"
 test_cov = "pytest --cov=stateflow stateflow/test/"
 test_verbose = "pytest -v stateflow/test/"
+mypy = "mypy stateflow"
 
 [tool.pdm.build]
 includes = ["stateflow"]
@@ -39,3 +40,8 @@ log_cli = true
 log_cli_level = "DEBUG"
 log_cli_format = "%(asctime)s [%(levelname)8s] %(name)12s %(message)s"
 log_cli_date_format = "%SS.%f"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["stateflow"]

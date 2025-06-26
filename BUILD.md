@@ -40,6 +40,14 @@ pdm run test_verbose   # Run tests with verbose output
 pdm run test_cov       # Run tests with coverage report
 ```
 
+### Run mypy (type checking)
+
+To check types with mypy in strict mode:
+
+```sh
+pdm run mypy
+```
+
 ### Build the package
 
 ```sh
@@ -56,5 +64,3 @@ pdm build
    ```
 
 See the [PDM documentation](https://pdm.fming.dev/latest/) for more details.
-
-
