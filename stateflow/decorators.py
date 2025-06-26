@@ -3,7 +3,7 @@ import contextlib
 import functools
 import inspect
 import logging
-from typing import Callable, Sequence, Union, overload, Optional, Any, Set, TypeVar, cast, List
+from typing import Callable, Sequence, Union, overload, Optional, Any, Set, TypeVar, cast, List, Type, Dict, TypeVar
 
 from typing_extensions import deprecated
 
@@ -12,12 +12,12 @@ from stateflow.common import CoroutineFunction, T, is_observable
 from stateflow.function import AsyncReactiveFunction, DecoratorParams, ReactiveCmFunction, SyncReactiveFunction
 
 
-
+F = TypeVar('F', bound=Callable[..., Any])
 
 
 @deprecated("Use ReactiveFunctionBase-derived classes")
 class DecoratedFunction:
-    def __init__(self, factory: Callable, func: Union[CoroutineFunction, Callable], decorator_params: DecoratorParams) -> None:
+    def __init__(self, factory: Callable[..., Any], func: Union[CoroutineFunction, Callable[..., Any]], decorator_params: DecoratorParams) -> None:
         self.factory = factory
         self.callable = func
         self.decorator = decorator_params
@@ -38,7 +38,7 @@ class DecoratedFunction:
         """
         return self.factory(self, args, kwargs)
 
-    def __get__(self, instance: Any, instancetype: Optional[type] = None) -> Callable:
+    def __get__(self, instance: Any, instancetype: Optional[Type] = None) -> Callable[..., Any]:
         """
         Implement the descriptor protocol to make decorating instance method possible.
         """
@@ -53,41 +53,40 @@ class DecoratedFunction:
 #FIXME: try composition instead of inheritance
 
 @overload
-def reactive(f: Callable) -> Callable:
+def reactive(f: F) -> F:
     ...
 
 
 @overload
-def reactive(*, pass_args: Optional[Sequence[str]] = None,
+def reactive(*, pass_args: Optional[Sequence[str | int]] = None,
              other_deps: Optional[Sequence[str]] = None,
-             dep_only_args: Optional[Sequence[str]] = None) -> Callable[[Callable], Callable]:
+             dep_only_args: Optional[Sequence[str]] = None) -> Callable[[F], F]:
     ...
 
 
-def reactive(pass_args: Union[Callable, Optional[Sequence[str|int]]] = None,
+def reactive(pass_args: Union[F, Optional[Sequence[str]]] = None,
              other_deps: Optional[Sequence[str]] = None,
-             dep_only_args: Optional[Sequence[str]] = None) -> Union[Callable, Callable[[Callable], Callable]]:
+             dep_only_args: Optional[Sequence[str]] = None) -> Union[F, Callable[[F], F]]:
     if callable(pass_args):
         # a shortcut that allows simple @reactive instead of @reactive()
-        return reactive()(pass_args)
+        return reactive()(pass_args)  # type: ignore
 
-    pass_args_set = set(pass_args or []) if not callable(pass_args) else set()
     decorator_params = DecoratorParams(
-        pass_args=pass_args_set,
+        pass_args=set(pass_args or []),
         dep_only_args=set(dep_only_args or []),
         other_deps=other_deps or []
     )
 
 
-    def wrapper(func: Callable) -> Callable:
+    def wrapper(func: F) -> F:
         """
         Decorate the function.
         """
         # FIXME: put every creating code into a function
         if asyncio.iscoroutinefunction(func):
-            return AsyncReactiveFunction(func, decorator_params)
+            return AsyncReactiveFunction(func, decorator_params)  # type: ignore
         elif inspect.isgeneratorfunction(func):
-            return ReactiveCmFunction(contextlib.contextmanager(func), decorator_params)
+            return ReactiveCmFunction(contextlib.contextmanager(func), decorator_params)  # type: ignore
         elif hasattr(func, '__call__'):
             return SyncReactiveFunction(func, decorator_params)
         # elif inspect.isasyncgenfunction(func) or inspect.isgeneratorfunction(func):

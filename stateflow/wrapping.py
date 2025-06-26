@@ -1,11 +1,11 @@
-from typing import Any, Callable, Iterable, Sequence, Tuple, Dict, List, Optional, cast, TypeVar, Union, Iterator, ContextManager
+from typing import Any, Callable, Iterable, Sequence, Tuple, Dict, List, Optional, cast, TypeVar, Union, Iterator, ContextManager, Type, TypeVar, Protocol
 
 from stateflow import reactive
 from stateflow.common import ev
 from stateflow.notifier import Notifier
 
 
-def get_subnotifier(self: Notifier, name: str) -> Notifier:
+def get_subnotifier(self: Any, name: str) -> Notifier:
     if not name:
         return self.__notifier__
     if not hasattr(self, '_subnotifiers'):
@@ -26,7 +26,7 @@ class many_notifiers:
             notifier.__exit__(exc_type, exc_val, exc_tb)
 
 
-def observable_method(unbound_method: Union[str, Callable], observed: Sequence[str], notified: Sequence[str]) -> Callable:
+def observable_method(unbound_method: Union[str, Callable[..., Any]], observed: Sequence[str], notified: Sequence[str]) -> Callable[..., Any]:
     # @reactive(other_deps=[get_subobservable observed)
     if isinstance(unbound_method, str):
         unbound_method = forward_by_name(unbound_method)
@@ -39,12 +39,12 @@ def observable_method(unbound_method: Union[str, Callable], observed: Sequence[s
 
     def wrapped2(self: Any, *args: Any, **kwargs: Any) -> Any:
         return wrapped(self, *args, **kwargs,
-                       _additional_deps=[get_subnotifier(self, obs) for i, obs in enumerate(observed)])
+                       _additional_deps=[get_subnotifier(self, obs) for obs in observed])
 
     return wrapped2
 
 
-def notifying_method(unbound_method: Union[str, Callable], notified: Sequence[str]) -> Callable:
+def notifying_method(unbound_method: Union[str, Callable[..., Any]], notified: Sequence[str]) -> Callable[..., Any]:
     if isinstance(unbound_method, str):
         unbound_method = forward_by_name(unbound_method)
 
@@ -57,27 +57,27 @@ def notifying_method(unbound_method: Union[str, Callable], notified: Sequence[st
     return wrapped
 
 
-def getter(unbound_method: Union[str, Callable], observed: Sequence[str]) -> Callable:
+def getter(unbound_method: Union[str, Callable[..., Any]], observed: Sequence[str]) -> Callable[..., Any]:
     return observable_method(unbound_method, observed=observed, notified=[])
 
 
-def reactive_setter(unbound_method: Union[str, Callable], notified: Sequence[str]) -> Callable:
+def reactive_setter(unbound_method: Union[str, Callable[..., Any]], notified: Sequence[str]) -> Callable[..., Any]:
     return observable_method(unbound_method, observed=[], notified=notified)
 
 
-def forward_by_name(name: str) -> Callable:
+def forward_by_name(name: str) -> Callable[..., Any]:
     def func(self: Any, *args: Any, **kwargs: Any) -> Any:
         return getattr(self, name)(*args, **kwargs)
 
     return func
 
 
-def add_reactive_forwarders(cl: Any, functions: Iterable[Tuple[str, Callable]]) -> None:
+def add_reactive_forwarders(cl: Any, functions: Iterable[Tuple[str, Callable[..., Any]]]) -> None:
     """
     For operators and methods that don't modify a state of an object (__neg_, etc.).
     """
 
-    def add_one(cl: Any, name: str, func: Callable) -> None:
+    def add_one(cl: Any, name: str, func: Callable[..., Any]) -> None:
         def wrapped(self: Any, *args: Any) -> Any:
               # fixme: we should rather forward to the _target, not to __eval__
             reactive_f = reactive(func)
@@ -93,12 +93,12 @@ def add_reactive_forwarders(cl: Any, functions: Iterable[Tuple[str, Callable]]) 
         add_one(cl, name, func)
 
 
-def add_assignop_forwarders(cl: Any, functions: Iterable[Tuple[str, Callable]]) -> None:
+def add_assignop_forwarders(cl: Any, functions: Iterable[Tuple[str, Callable[..., Any]]]) -> None:
     """
     For operators like '+=' and one-arg functions like append, remove
     """
 
-    def add_one(cl: Any, name: str, func: Callable) -> None:
+    def add_one(cl: Any, name: str, func: Callable[..., Any]) -> None:
         def wrapped(self: Any, arg1: Any) -> Any:
             target = self._target()
             self_unwrapped = target.__eval__()
@@ -111,12 +111,12 @@ def add_assignop_forwarders(cl: Any, functions: Iterable[Tuple[str, Callable]]) 
         add_one(cl, name, func)
 
 
-def add_notifying_forwarders(cl: Any, functions: Iterable[Tuple[str, Callable]]) -> None:
+def add_notifying_forwarders(cl: Any, functions: Iterable[Tuple[str, Callable[..., Any]]]) -> None:
     """
     For operators like '+=' and one-arg functions like append, remove
     """
 
-    def add_one(cl: Any, name: str, func: Callable) -> None:
+    def add_one(cl: Any, name: str, func: Callable[..., Any]) -> None:
         def wrapped(self: Any, *args: Any) -> Any:
             target = self._target()
             self_unwrapped = target.__eval__()

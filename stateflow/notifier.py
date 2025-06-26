@@ -223,7 +223,7 @@ class Notifier(INotifier):
 ACTIVE_NOTIFIER = Notifier(forced_active=True, name="ACTIVE")
 
 
-def refresh_notifiers(*notifiers: INotifier) -> None:
+def refresh_notifiers(*notifiers: Notifier) -> None:
     """
     Activates notifier for a moment, so if there is a call pending somewhere in (possibly indirectly) observed notifiers
     whole chain is called.

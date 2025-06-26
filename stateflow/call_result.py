@@ -1,20 +1,24 @@
 import asyncio
+from inspect import Signature
 import logging
 import traceback
 from abc import abstractmethod
 from itertools import chain
-from typing import Any, Dict, List, Mapping, Sequence, Set, Tuple, Callable, Optional, TypeVar, Union, cast, Type, Iterator, ContextManager, AsyncContextManager
+from typing import Any, Dict, List, Mapping, Sequence, Set, Tuple, Callable, Optional, TypeVar, Union, cast, Type, Iterator, ContextManager, AsyncContextManager, Protocol, Generic, ForwardRef, Iterable
 from types import TracebackType
 
 from stateflow.common import Observable, T, ev, is_observable
 from stateflow.errors import ArgEvalError, BodyEvalError, raise_need_async_eval, EvError
 from stateflow.internal_utils import bind_arguments
-from stateflow.notifier import INotifier, Notifier
+from stateflow.notifier import Notifier, INotifier
 
+
+# Forward reference for ReactiveFunction which is defined in function.py
+ReactiveFunction = ForwardRef('stateflow.function.ReactiveFunction')
 
 
 class ArgsHelper:
-    def __init__(self, args: Tuple[Any, ...], kwargs: Dict[str, Any], signature: Optional[Any], callable: Callable) -> None:
+    def __init__(self, args: Tuple[Any, ...], kwargs: Dict[str, Any], signature: Optional[Signature], callable: Callable) -> None:
         if signature:
             # support default parameters
             try:
@@ -34,10 +38,10 @@ class ArgsHelper:
             self.args_names = [None] * len(self.args)
             self.kwargs_indices = [None] * len(self.kwargs)
 
-    def iterate_args(self) -> Iterator[Tuple[int, Optional[str], Any]]:
+    def iterate_args(self) -> Iterable[Tuple[int, Optional[str], Any]]:
         return ((index, name, arg) for name, (index, arg) in zip(self.args_names, enumerate(self.args)))
 
-    def iterate_kwargs(self) -> Iterator[Tuple[Optional[int], str, Any]]:
+    def iterate_kwargs(self) -> Iterable[Tuple[Optional[int], str, Any]]:
         return ((index, name, arg) for index, (name, arg) in zip(self.kwargs_indices, self.kwargs.items()))
 
 
@@ -59,7 +63,7 @@ def eval_args(args_helper: ArgsHelper, pass_args: Set[str], func_name: str, call
 
 
 def observe(arg: Any, notifier: INotifier) -> None:
-    if isinstance(arg, Notifier):
+    if isinstance(arg, INotifier):
         return arg.add_observer(notifier)
     else:
         return arg.__notifier__().add_observer(notifier)
@@ -76,7 +80,7 @@ def observe_args(args_helper: ArgsHelper, pass_args: Set[str], notifier: INotifi
             maybe_observe(arg, notifier)
 
 
-def callable_name(c: Callable) -> str:
+def callable_name(c: Callable[..., Any]) -> str:
     if hasattr(c, '__name__'):
         return c.__name__
     else:
@@ -87,7 +91,7 @@ class CallResult(Observable[T]):
     An observable that represents the result of a reactive function call. It will be updated when the function's
     arguments change.
     """
-    def __init__(self, reactive_function: 'ReactiveFunction', args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> None:
+    def __init__(self, reactive_function: ReactiveFunction, args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> None:
         self.reactive_function = reactive_function
         self._notifier = Notifier()
         self._notifier.name = 'CallResult of {}'.format(callable_name(reactive_function.callable))
@@ -116,7 +120,7 @@ class CallResult(Observable[T]):
 
         observe_args(self.args_helper, self.reactive_function.decorator_params.pass_args, self.__notifier__())
 
-    def __notifier__(self) -> INotifier:
+    def __notifier__(self) -> Notifier:
         return self._notifier
 
     # @contextmanager

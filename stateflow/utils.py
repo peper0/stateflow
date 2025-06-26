@@ -97,7 +97,7 @@ make_dict = reactive(dict)
 
 def rewrap_dict(d: Dict[Any, Any]) -> Any:
     @reactive
-    def foo(keys: Any, *values: Any) -> Dict[Any, Any]:
+    def foo(keys: Iterable[Any], *values: Iterable[Any]) -> Dict[Any, Any]:
         return {k: v for k, v in zip(keys, values)}
 
     return foo(d.keys(), *d.values())
