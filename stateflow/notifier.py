@@ -2,14 +2,14 @@ import abc
 import logging
 import weakref
 from _weakrefset import WeakSet
-from typing import Any, Callable, Coroutine, Optional, Set, TypeVar, Union, cast
+from typing import Any, Callable, Coroutine, Optional, Set, TypeVar, Union, cast, Collection
 
 from stateflow.common import NotifyFunc
 from stateflow.sync_refresher import get_default_refresher
 
 logger = logging.getLogger('notify')
 
-all_notifiers: WeakSet = WeakSet()
+all_notifiers: WeakSet[Any] = WeakSet()
 
 _got_finals = 0
 
@@ -44,13 +44,12 @@ class INotifier(abc.ABC):
 
     @abc.abstractmethod
     def notify(self) -> None:
-        
         """Notify the notifier that the related object should be updated (and all dependents). """
         ...
 
     # FIXME rename to "call_update"?
     @abc.abstractmethod
-    def call(self) -> bool:
+    def call(self) -> None:
         """Call the update callback in the related object and notify active dependents."""
         ...
 
@@ -87,8 +86,8 @@ class DummyNotifier(INotifier):
     def notify(self) -> None:
         pass
 
-    def call(self) -> bool:
-        return False
+    def call(self) -> None:
+        pass
 
     @property
     def priority(self) -> int:
@@ -151,7 +150,7 @@ class Notifier(INotifier):
         else:
             self._called_when_inactive = True
 
-    def _notify_observers(self):
+    def _notify_observers(self) -> None:
         for observer in self._observers:  # fixme: shouldn't we use _active_observers here?
             observer.notify()
 
@@ -224,7 +223,7 @@ class Notifier(INotifier):
 ACTIVE_NOTIFIER = Notifier(forced_active=True, name="ACTIVE")
 
 
-def refresh_notifiers(*notifiers: Notifier) -> None:
+def refresh_notifiers(*notifiers: INotifier) -> None:
     """
     Activates notifier for a moment, so if there is a call pending somewhere in (possibly indirectly) observed notifiers
     whole chain is called.

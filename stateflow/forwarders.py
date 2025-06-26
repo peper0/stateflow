@@ -2,6 +2,7 @@ import operator
 from abc import abstractmethod
 from functools import wraps
 from math import ceil, floor
+from typing import Any, Callable, Iterable, Tuple, List, Dict, TypeVar, Union, cast
 
 from stateflow.decorators import reactive
 from stateflow.common import T, Observable, assign, ev_one
@@ -18,9 +19,9 @@ UNARY_OPERATORS = [
 ]
 
 
-def right_2arg(func):
+def right_2arg(func: Callable[[Any, Any], Any]) -> Callable[[Any, Any], Any]:
     @wraps(func)
-    def f(a1, a2):
+    def f(a1: Any, a2: Any) -> Any:
         return func(a2, a1)
 
     return f
@@ -108,7 +109,7 @@ OTHER_MODYFING_2ARG = [
 
 class ForwardersBase:
     @abstractmethod
-    def _target(self):
+    def _target(self) -> Any:
         """
         Forwarded methods are called on the object returned by this function.
         :return:
@@ -122,24 +123,24 @@ class ConstForwarders(ForwardersBase):
         assert isinstance(self, Observable)
         return self
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(ev_one(self._target()))
 
-    def __trunc__(self):
+    def __trunc__(self) -> int:
         # python raises an exception if __trunc__ returns non-int
         return int(ev_one(self._target()))
 
-    def __str__(self):
+    def __str__(self) -> str:
         return ev_one(self._target()).__str__()
 
-    def __bytes__(self):
+    def __bytes__(self) -> bytes:
         return ev_one(self._target()).__bytes__()
 
-    def __format__(self, format_spec):
+    def __format__(self, format_spec: str) -> str:
         return format(ev_one(self._target()), format_spec)
 
     @reactive
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """
         The argument `self` is evaluated inside this call so there is not infinite recursion (`self` is no more of
         `ConstForwarders` class).
@@ -148,7 +149,7 @@ class ConstForwarders(ForwardersBase):
         return self.__call__(*args, **kwargs)
 
     @reactive
-    def __getattr__(self, item):
+    def __getattr__(self, item: str) -> Any:
         """
         The argument `self` is evaluated inside this call so there is not infinite recursion (`self` is no more of
         `ConstForwarders` class).
@@ -159,10 +160,10 @@ class ConstForwarders(ForwardersBase):
 
 class MutatingForwarders(ForwardersBase):
     @abstractmethod
-    def _target(self):
+    def _target(self) -> Any:
         raise NotImplementedError()
 
-    def __imatmul__(self, other):
+    def __imatmul__(self, other: Any) -> 'MutatingForwarders':
         """
         A fancy way to assign values to a variable ("v @= 5" instead of "v.__assign__(5)")
         """

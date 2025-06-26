@@ -1,5 +1,5 @@
 from functools import wraps
-from typing import Callable
+from typing import Any, Callable, List, Dict, Optional, Tuple, TypeVar, cast, Type
 
 from stateflow.common import Observable, T, ev, is_observable
 from stateflow.decorators import reactive
@@ -8,7 +8,7 @@ from stateflow.notifier import ACTIVE_NOTIFIER
 from stateflow.var import Const, NotifiedProxy, Var
 
 
-def set_if_inequal(var_to_set, new_value):
+def set_if_inequal(var_to_set: Any, new_value: Any) -> None:
     try:
         # print("{} is {}".format(repr(var_to_set), var_to_set.__eval__))
         if var_to_set.__eval__() == new_value:
@@ -19,9 +19,9 @@ def set_if_inequal(var_to_set, new_value):
     var_to_set.__assign__(new_value)
 
 
-def bind_vars(*vars):
+def bind_vars(*vars: Any) -> List[Any]:
     @reactive
-    def set_all(value):
+    def set_all(value: Any) -> None:
         for var in vars:
             set_if_inequal(var, value)
 
@@ -29,17 +29,17 @@ def bind_vars(*vars):
 
 
 class VolatileProxy(NotifiedProxy[T]):
-    def __init__(self, inner):
+    def __init__(self, inner: Observable[T]) -> None:
         super().__init__(inner)
         self._notifier.add_observer(ACTIVE_NOTIFIER)
         self._notifier.name = "Volatile"
         self._notify() # if notifier was active, the notify would not be called again
 
-    def _notify(self):
+    def _notify(self) -> None:
         ev(self._inner)
 
 
-def volatile(var_or_callable):
+def volatile(var_or_callable: Any) -> Any:
     # FIXME: to be rethinked
     if is_observable(var_or_callable):
         return VolatileProxy(var_or_callable)
@@ -47,7 +47,7 @@ def volatile(var_or_callable):
         func = var_or_callable
 
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             res = func(*args, **kwargs)
             if is_observable(res):
                 return volatile(res)
@@ -59,45 +59,45 @@ def volatile(var_or_callable):
         raise TypeError("argument type should be Callable or Observable (got {})".format(type(var_or_callable)))
 
 
-def const(raw):
+def const(raw: T) -> Const[T]:
     return Const(raw)
 
 
-def var(raw=Var.NOT_INITIALIZED):
+def var(raw: T = Var.NOT_INITIALIZED) -> Var[T]:
     return Var(raw)
 
 
 @reactive
 def validate_arg(arg: Observable[T], is_valid: Callable[[Observable[T]], bool],
-                 description='"{val}" does not satisfy the condition'):
+                 description: str = '"{val}" does not satisfy the condition') -> Observable[T]:
     if not is_valid(arg):
         raise ValidationError(description.format(val=arg))
     return arg
 
 
 @reactive
-def not_none(arg: Observable[T]):
+def not_none(arg: Observable[T]) -> Observable[T]:
     if arg is None:
         raise ValidationError('should not be none')
     return arg
 
 
 @reactive
-def make_list(*args):
+def make_list(*args: Any) -> List[Any]:
     return [a for a in args]
 
 
 @reactive
-def make_tuple(*args):
+def make_tuple(*args: Any) -> Tuple[Any, ...]:
     return tuple(args)
 
 
 make_dict = reactive(dict)
 
 
-def rewrap_dict(d: dict):
+def rewrap_dict(d: Dict[Any, Any]) -> Any:
     @reactive
-    def foo(keys, *values):
+    def foo(keys: Any, *values: Any) -> Dict[Any, Any]:
         return {k: v for k, v in zip(keys, values)}
 
     return foo(d.keys(), *d.values())

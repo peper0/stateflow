@@ -79,8 +79,6 @@ class AsyncRefresher:
                     #     res = await res
                     notification.stats['exception'] = None
 
-                    assert isinstance(res, bool), "res has type {}, should be bool for {}".format(type(res),
-                                                                                                  notifier.name)
                     # if res:
                     #     logger.debug(' notification finished with True, notifying observers')
                     #     notifier._notify_observers()  # Use the internal method instead of a non-existent method

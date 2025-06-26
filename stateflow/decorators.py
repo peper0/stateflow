@@ -3,7 +3,7 @@ import contextlib
 import functools
 import inspect
 import logging
-from typing import Callable, Sequence, Union, overload
+from typing import Callable, Sequence, Union, overload, Optional, Any, Set, TypeVar, cast, List
 
 from typing_extensions import deprecated
 
@@ -17,7 +17,7 @@ from stateflow.function import AsyncReactiveFunction, DecoratorParams, ReactiveC
 
 @deprecated("Use ReactiveFunctionBase-derived classes")
 class DecoratedFunction:
-    def __init__(self, factory, func: Union[CoroutineFunction, Callable], decorator_params: DecoratorParams):
+    def __init__(self, factory: Callable, func: Union[CoroutineFunction, Callable], decorator_params: DecoratorParams) -> None:
         self.factory = factory
         self.callable = func
         self.decorator = decorator_params
@@ -28,17 +28,17 @@ class DecoratedFunction:
         self.args_names = list(self.signature.parameters) if self.signature else None
         functools.update_wrapper(self, func)
 
-    def really_call(self, args, kwargs):
+    def really_call(self, args: Sequence[Any], kwargs: dict[str, Any]) -> Any:
         return self.callable(*args, **kwargs)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """
         Bind arguments and return an `Observable` that calls the function on __eval__ and notifies when any argument
         changes.
         """
         return self.factory(self, args, kwargs)
 
-    def __get__(self, instance, instancetype):
+    def __get__(self, instance: Any, instancetype: Optional[type] = None) -> Callable:
         """
         Implement the descriptor protocol to make decorating instance method possible.
         """
@@ -46,7 +46,7 @@ class DecoratedFunction:
             logging.error("instance is None")
         return functools.partial(self.__call__, instance)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return 'DecoratedFunction({})'.format(self.callable)
 
 
@@ -54,32 +54,32 @@ class DecoratedFunction:
 
 @overload
 def reactive(f: Callable) -> Callable:
-    pass
+    ...
 
 
 @overload
-def reactive(pass_args: Sequence[str] = None,
-             other_deps: Sequence[str] = None,
-             dep_only_args: Sequence[str] = None) -> Callable:
-    pass
+def reactive(*, pass_args: Optional[Sequence[str]] = None,
+             other_deps: Optional[Sequence[str]] = None,
+             dep_only_args: Optional[Sequence[str]] = None) -> Callable[[Callable], Callable]:
+    ...
 
 
-
-def reactive(pass_args: Sequence[str] = None,
-             other_deps: Sequence[str] = None,
-             dep_only_args: Sequence[str] = None):
+def reactive(pass_args: Union[Callable, Optional[Sequence[str|int]]] = None,
+             other_deps: Optional[Sequence[str]] = None,
+             dep_only_args: Optional[Sequence[str]] = None) -> Union[Callable, Callable[[Callable], Callable]]:
     if callable(pass_args):
         # a shortcut that allows simple @reactive instead of @reactive()
         return reactive()(pass_args)
 
+    pass_args_set = set(pass_args or []) if not callable(pass_args) else set()
     decorator_params = DecoratorParams(
-        pass_args=set(pass_args or []),
+        pass_args=pass_args_set,
         dep_only_args=set(dep_only_args or []),
         other_deps=other_deps or []
     )
 
 
-    def wrapper(func):
+    def wrapper(func: Callable) -> Callable:
         """
         Decorate the function.
         """
@@ -111,9 +111,6 @@ def reactive(pass_args: Sequence[str] = None,
         #     return deco(contextlib.contextmanager(f))
         else:
             raise Exception("{} is neither a function nor a coroutine function (async def...)".format(repr(func)))
-
-
-
 
     return wrapper
 

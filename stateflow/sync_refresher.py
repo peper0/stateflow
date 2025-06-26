@@ -3,7 +3,7 @@ import gc
 import logging
 import sys
 from contextlib import suppress
-from typing import Any, Dict, NamedTuple, Optional, TYPE_CHECKING, Union
+from typing import Any, Dict, NamedTuple, Optional, TYPE_CHECKING, Union, Set, Type
 
 # For avoiding circular imports
 if TYPE_CHECKING:

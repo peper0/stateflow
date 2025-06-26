@@ -3,17 +3,18 @@ import logging
 import traceback
 from abc import abstractmethod
 from itertools import chain
-from typing import Any, Dict, List, Mapping, Sequence, Set, Tuple, Callable
+from typing import Any, Dict, List, Mapping, Sequence, Set, Tuple, Callable, Optional, TypeVar, Union, cast, Type, Iterator, ContextManager, AsyncContextManager
+from types import TracebackType
 
 from stateflow.common import Observable, T, ev, is_observable
 from stateflow.errors import ArgEvalError, BodyEvalError, raise_need_async_eval, EvError
 from stateflow.internal_utils import bind_arguments
-from stateflow.notifier import Notifier
+from stateflow.notifier import INotifier, Notifier
 
 
 
 class ArgsHelper:
-    def __init__(self, args, kwargs, signature, callable):
+    def __init__(self, args: Tuple[Any, ...], kwargs: Dict[str, Any], signature: Optional[Any], callable: Callable) -> None:
         if signature:
             # support default parameters
             try:
@@ -33,15 +34,15 @@ class ArgsHelper:
             self.args_names = [None] * len(self.args)
             self.kwargs_indices = [None] * len(self.kwargs)
 
-    def iterate_args(self):
+    def iterate_args(self) -> Iterator[Tuple[int, Optional[str], Any]]:
         return ((index, name, arg) for name, (index, arg) in zip(self.args_names, enumerate(self.args)))
 
-    def iterate_kwargs(self):
+    def iterate_kwargs(self) -> Iterator[Tuple[Optional[int], str, Any]]:
         return ((index, name, arg) for index, (name, arg) in zip(self.kwargs_indices, self.kwargs.items()))
 
 
-def eval_args(args_helper: ArgsHelper, pass_args, func_name, call_stack) -> Tuple[List[Any], Dict[str, Any]]:
-    def rewrap(index, name, arg):
+def eval_args(args_helper: ArgsHelper, pass_args: Set[str], func_name: str, call_stack: List[Any]) -> Tuple[List[Any], Dict[str, Any]]:
+    def rewrap(index: Optional[int], name: Optional[str], arg: Any) -> Any:
         try:
             if index in pass_args or name in pass_args:
                 return arg
@@ -57,36 +58,36 @@ def eval_args(args_helper: ArgsHelper, pass_args, func_name, call_stack) -> Tupl
             {name: rewrap(index, name, arg) for index, name, arg in args_helper.iterate_kwargs()})
 
 
-def observe(arg, notifier):
+def observe(arg: Any, notifier: INotifier) -> None:
     if isinstance(arg, Notifier):
         return arg.add_observer(notifier)
     else:
         return arg.__notifier__().add_observer(notifier)
 
 
-def maybe_observe(arg, notifier):
+def maybe_observe(arg: Any, notifier: INotifier) -> None:
     if is_observable(arg):
         observe(arg, notifier)
 
 
-def observe_args(args_helper: ArgsHelper, pass_args: Set[str], notifier):
+def observe_args(args_helper: ArgsHelper, pass_args: Set[str], notifier: INotifier) -> None:
     for index, name, arg in chain(args_helper.iterate_args(), args_helper.iterate_kwargs()):
         if index not in pass_args and name not in pass_args:
             maybe_observe(arg, notifier)
 
 
-def callable_name(c: Callable):
+def callable_name(c: Callable) -> str:
     if hasattr(c, '__name__'):
         return c.__name__
     else:
-        "<unknown>"
+        return "<unknown>"
 
 class CallResult(Observable[T]):
     """
     An observable that represents the result of a reactive function call. It will be updated when the function's
     arguments change.
     """
-    def __init__(self, reactive_function: 'ReactiveFunction', args, kwargs):
+    def __init__(self, reactive_function: 'ReactiveFunction', args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> None:
         self.reactive_function = reactive_function
         self._notifier = Notifier()
         self._notifier.name = 'CallResult of {}'.format(callable_name(reactive_function.callable))
@@ -115,7 +116,7 @@ class CallResult(Observable[T]):
 
         observe_args(self.args_helper, self.reactive_function.decorator_params.pass_args, self.__notifier__())
 
-    def __notifier__(self):
+    def __notifier__(self) -> INotifier:
         return self._notifier
 
     # @contextmanager
@@ -133,7 +134,7 @@ class CallResult(Observable[T]):
     #         if reraise:
     #             raise HideStackHelper() from e
 
-    def _call(self):
+    def _call(self) -> None:
         """
         returns one of:
         - an Observable,
@@ -159,37 +160,37 @@ class CallResult(Observable[T]):
             self._update_in_progress = False
 
     @abstractmethod
-    def __eval__(self):
+    def __eval__(self) -> Any:
         pass
 
 
 class SyncCallResult(CallResult[T]):
-    def __eval__(self):
+    def __eval__(self) -> Any:
         return self._call()
 
 
 class AsyncCallResult(CallResult[T]):
-    async def __aeval__(self):
+    async def __aeval__(self) -> Any:
         return await self._call()
 
-    def __eval__(self):
+    def __eval__(self) -> Any:
         raise Exception("called __eval__ on the value that depends on an asynchronously evaluated value; use __aeval__")
 
 
 class CmCallResult(CallResult[T]):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.cm = None
+        self.cm: Optional[ContextManager[Any]] = None
 
-    def __eval__(self):
+    def __eval__(self) -> Any:
         self.__finalize__()
         self.cm = self._call()
         return self.cm.__enter__()
 
-    def __del__(self):
+    def __del__(self) -> None:
         self.__finalize__()
 
-    def __finalize__(self):
+    def __finalize__(self) -> None:
         try:
             if self.cm:
                 self.cm.__exit__(None, None, None)
@@ -199,19 +200,19 @@ class CmCallResult(CallResult[T]):
 
 
 class AsyncCmCallResult(CallResult[T]):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.cm = None
+        self.cm: Optional[AsyncContextManager[Any]] = None
 
-    async def __aeval__(self):
+    async def __aeval__(self) -> Any:
         await self.__afinalize__()
         self.cm = self._call()
         return await self.cm.__aenter__()
 
-    def __del__(self):
+    def __del__(self) -> None:
         asyncio.ensure_future(self.__afinalize__())
 
-    async def __afinalize__(self):
+    async def __afinalize__(self) -> None:
         try:
             if self.cm:
                 cm = self.cm
@@ -220,5 +221,5 @@ class AsyncCmCallResult(CallResult[T]):
         except Exception:
             logging.exception("ignoring exception in cleanup")
 
-    def __eval__(self):
+    def __eval__(self) -> Any:
         raise_need_async_eval()
