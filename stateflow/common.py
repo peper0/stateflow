@@ -2,7 +2,12 @@ import asyncio
 from abc import abstractmethod
 from typing import Callable, Coroutine, Generic, TypeVar, Union
 
-from stateflow.errors import NotAssignable
+from stateflow.errors import ArgEvalError, BodyEvalError, EvError, NotAssignable
+
+
+FULL_TRACEBACKS = False
+REPR_EVALUATES = False
+deprecated_interactive_mode = False
 
 
 def ensure_coro_func(f):
@@ -16,7 +21,6 @@ def ensure_coro_func(f):
 
 
 CoroutineFunction = Callable[..., Coroutine]
-
 MaybeAsyncFunction = Union[Callable, CoroutineFunction]
 NotifyFunc = Union[Callable[[], None], Callable[[], Coroutine]]
 
@@ -24,7 +28,8 @@ T = TypeVar('T')
 
 
 class Observable(Generic[T]):
-    @property
+    repr_name = 'Observable'
+
     @abstractmethod
     def __notifier__(self) -> 'Notifier':
         """
@@ -35,58 +40,68 @@ class Observable(Generic[T]):
     @abstractmethod
     def __eval__(self) -> T:
         """
-        Return the object that is wrapped.
-        It's usually a raw non observable object, however inside "Proxy" it's used to hold a reference to any object (possibly other Proxy or other wrapper)
-        It will be taken by the @reactive function and passed to the body of the function.
+        Returns current value of the observable.
+
+        Not a property since there is a mess with forwarding of getattr (via Forwarders) when getting property.
         """
         pass
 
-    async def __aeval__(self) -> T:
-        return self.__eval__()
-
+    @abstractmethod
     def __assign__(self, value: T):
         raise NotAssignable()
 
+    def __finalize__(self):
+        """
+        Declare that this observable will be never used again.
+        :return:
+        """
+        pass
 
-def ev_strict(v: Observable[T]) -> T:
-    return v.__eval__()
+    def __repr__(self):
+        try:
+            if REPR_EVALUATES:
+                self.__notifier__().refresh()
+                val = self.__eval__()
+            else:
+                return f'{self.repr_name}(?)'
+        except Exception as e:
+            return '{}(<{}: {}>)'.format(self.repr_name, type(e).__name__, str(e))
+        else:
+            return f'{self.repr_name}({repr(val)})'
 
 
-async def aev_strict(v: Observable[T]) -> T:
-    return await v.__aeval__()
+
+# async def aev_strict(v: Observable[T]) -> T:
+#     return await v.__aeval__()
+#
+
+def ev(v: Union[T, Observable[T]]) -> T:
+    while is_observable(v):
+        v = ev_one(v)
+    return v
 
 
 def ev_exception(v):
     try:
-        v.__eval__()
+        _ = ev(v)
         return None
-    except Exception as e:
+    except EvError as e:
         return e
 
 
 def ev_def(v, val_on_exception=None):
     try:
-        return v.__eval__()
-    except Exception as e:
+        return ev(v)
+    except EvError as e:
         return val_on_exception
-
-
-def ev(v: Union[T, Observable[T]]) -> T:
-    if is_observable(v):
-        return ev_strict(v)
-    else:
-        return v
 
 
 def assign(var: Observable[T], val: T):
     var.__assign__(val)
 
 
-async def aev(v: Union[T, Observable[T]]) -> T:
-    if is_observable(v):
-        return await aev_strict(v)
-    else:
-        return v
+def finalize(var: Observable[T]):
+    var.__finalize__()
 
 
 def is_observable(v):
@@ -94,11 +109,19 @@ def is_observable(v):
     Check whether given object should be considered as "observable" i.e. the object that manages notifiers internally
     and returns observable objects from it's methods.
     """
-    return hasattr(v, '__notifier__') and hasattr(v, '__eval__')
+    return hasattr(type(v), '__notifier__') and hasattr(type(v), '__eval__')
 
 
-def is_wrapper(v):
-    """
-    deprecated
-    """
-    return is_observable(v)
+def ev_one(v: Observable[T]) -> T:
+    assert is_observable(v)
+    # BodyEvalError and ArgEvalError are handled in a special way to
+    try:
+        v.__notifier__().refresh()  # FIXME: why do we need this? shouldn't eval force to evaluate
+        return v.__eval__()
+    except BodyEvalError as e:
+        # hide a part of stack from here to the place where BodyEvalError was raised
+        raise EvError() from e.with_traceback(None)
+    except ArgEvalError as e:
+        raise EvError() from e.with_traceback(None)
+
+

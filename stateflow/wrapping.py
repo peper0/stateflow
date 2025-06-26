@@ -2,11 +2,11 @@ from typing import Any, Callable, Iterable, Sequence, Tuple
 
 from stateflow import reactive
 from stateflow.common import ev
-from stateflow.notifier import Notifier, ScopedName, many_notifiers
+from stateflow.notifier import Notifier
 
 
 def get_subnotifier(self: Notifier, name: str) -> Notifier:
-    if name is None or name is '':
+    if not name:
         return self.__notifier__
     if not hasattr(self, '_subnotifiers'):
         setattr(self, '_subnotifiers', dict())
@@ -66,15 +66,13 @@ def add_reactive_forwarders(cl: Any, functions: Iterable[Tuple[str, Callable]]):
 
     def add_one(cl: Any, name, func):
         def wrapped(self, *args):
-            @reactive  # fixme: we should rather forward to the _target, not to __eval__
-            def reactive_f(self_unwrapped, *args):
-                return func(self_unwrapped, *args)
+              # fixme: we should rather forward to the _target, not to __eval__
+            reactive_f = reactive(func)
 
             prefix = ''
             if hasattr(self, '__notifier__'):
-                preifx = self.__notifier__.name + '.'
-            with ScopedName(name=preifx + name, final=True):
-                return reactive_f(self, *args)
+                preifx = self.__notifier__().name + '.'
+            return reactive_f(self, *args)
 
         setattr(cl, name, wrapped)
 
@@ -109,7 +107,7 @@ def add_notifying_forwarders(cl: Any, functions: Iterable[Tuple[str, Callable]])
         def wrapped(self, *args):
             target = self._target()
             self_unwrapped = target.__eval__()
-            with target.__notifier__:
+            with target.__notifier__():
                 res = func(self_unwrapped, *args)
             return res
 

@@ -1,12 +1,17 @@
+import abc
 import logging
 import weakref
 from _weakrefset import WeakSet
-from contextlib import contextmanager
 from typing import Set
 
 from stateflow.common import NotifyFunc
+from stateflow.sync_refresher import get_default_refresher
 
 logger = logging.getLogger('notify')
+
+all_notifiers = WeakSet()
+
+_got_finals = 0
 
 
 def is_hashable(v):
@@ -22,149 +27,251 @@ def is_notify_func(notify_func):
     return is_hashable(notify_func) and hasattr(notify_func, '__call__')
 
 
-class DummyNotifier:
-    def __init__(self, priority):
-        self.priority = priority
+class INotifier(abc.ABC):
+    """
+    A node in a graph that notifications (about changes) are propagated.
+
+    A notifier observes other notifiers. It means, that if one of the observed notifiers is "notifier", the current one
+    will also be notified soon (unless it is "inactive"). Physically, the notifications are called by `Refresher`.
+
+    A notifier can be "active" or "inactive". Inactive notifiers are ignored by the refresher. Notifier is active if
+    it has at least one active observer.
+
+    A notifier has a priority, which is used to determine the order of notifications. The priority is an integer, where
+    lower numbers are called first. The priority of the notifier is always greater than the priority of all its observers.
+    """
+
+    @abc.abstractmethod
+    def notify(self):
+        """Notify the notifier that the related object should be updated (and all dependents). """
+        ...
+
+    # FIXME rename to "call_update"?
+    @abc.abstractmethod
+    def call(self):
+        """Call the update callback in the related object and notify active dependents."""
+        ...
+
+    @property
+    @abc.abstractmethod
+    def priority(self) -> int:
+        """Return the priority of the notifier."""
+        ...
+
+    @property
+    @abc.abstractmethod
+    def active(self) -> bool:
+        """Return whether the notifier is active (i.e. it has active observers)."""
+        ...
+
+    @abc.abstractmethod
+    def add_observer(self, observer: 'INotifier'):
+        """Add an observer to this notifier. It fill be notified when this notifier is called"""
+        ...
+
+    @abc.abstractmethod
+    def remove_observer(self, observer: 'INotifier'):
+        """Remove an observer from this notifier. It will not be notified anymore."""
+        ...
+
+    def refresh(self):
+        refresh_notifiers(self)
+
+class DummyNotifier(INotifier):
+    def __init__(self, priority: int) -> None:
+        self._priority = priority
         self.name = 'dummy'
-
-    def add_observer(self, notifier: 'Notifier'):
-        pass
-
-    def remove_observer(self, notifier: 'Notifier'):
-        pass
-
-    def __enter__(self):
-        pass
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
 
     def notify(self):
         pass
 
+    def call(self):
+        pass
 
-all_notifiers = WeakSet()
+    @property
+    def priority(self):
+        return self._priority
 
-_got_finals = 0
+    @property
+    def active(self):
+        return False
+
+    def add_observer(self, observer: INotifier) -> None:
+        return
+
+    def remove_observer(self, observer: INotifier) -> None:
+        return
+
+    def refresh(self):
+        return
 
 
-class ScopedName:
-    names = []
 
-    def __init__(self, name, final=False):
+class Notifier(INotifier):
+
+
+    def __init__(self, notify_func: NotifyFunc = lambda: True, forced_active=False, name=""):
         """
-        :param name:
-        :param final: Don't chain with ScopedName()s already on the stack
+        Arguments:
+            notify_func: A function that will be called when one of the observed notifiers is changed.
+            forced_active: If True, this notifier is always active, even if there are no active observers.
         """
+        self._observers: Set[Notifier] = weakref.WeakSet()
+        self._active_observers: Set[Notifier] = weakref.WeakSet()
+        self._observed: Set[Notifier] = weakref.WeakSet()
+
+        self._priority = 0  # lowest called first; should be greater than all observed
+
+        self._forced_active = forced_active
+        self._is_active = forced_active  # notifier is active iif at least one of its observers is active or _forced_active
+
+        self._called_when_inactive = False
+
         self.name = name
-        self.final = final
-
-    def __enter__(self):
-        global _got_finals
-        if self.name is not None and _got_finals == 0:
-            self.names.append(self.name)
-        if self.final:
-            _got_finals += 1
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        global _got_finals
-        if self.final:
-            _got_finals -= 1
-        if self.name is not None and _got_finals == 0:
-            res = self.names.pop()
-            assert res == self.name
-
-
-class Notifier:
-    def __init__(self, notify_func: NotifyFunc = lambda: True):
-        self._observers = weakref.WeakSet()  # type: Set[Notifier]
-        self.name = '/'.join(ScopedName.names)
         assert is_notify_func(notify_func)
         self.notify_func = notify_func
         self.calls = 0
         self.stats = dict()
         self.frame = None
         all_notifiers.add(self)
-        self.pending_updates = 0
-        self.possibly_changed = False
-        self.recursion_in_progress = False
-        #  lowest called first; should be greater than all observed
 
     def notify(self):
-        self.begin_update()
-        self.finish_update(True)
+        logger.debug(f"Notifier notified: {self}")
+        get_default_refresher().schedule_call(self)
+
+    def call(self):
+        logger.debug(f"Notifier called: {self}")
+        self.calls += 1
+        if self.active:
+            possibly_changed = self.notify_func()
+            if possibly_changed:
+                self._notify_observers()
+        else:
+            self._called_when_inactive = True
+
+    def _notify_observers(self):
+        for observer in self._observers:  # fixme: shouldn't we use _active_observers here?
+            observer.notify()
 
     def add_observer(self, observer: 'Notifier'):
+        """
+        :param observer: A notifier that will be notified (WARNING! it must be owned somewhere else; it's especially
+                       important for bound methods or partially bound functions). It must be hashable and equality
+                       comparable. If there are more than one calls to the same notifier pending, they are reduced to
+                       one only. It will take part in the topological sort when obtaining an order of
+                       notifications. It's priority will be enforced to be greater than the priority of this object.
+        """
+        observer._set_priority_at_least(self.priority + 1)
         self._observers.add(observer)
-        if self.pending_updates > 0:
-            observer.begin_update()
+        observer._observed.add(self)
+        if observer.active:
+            self._add_to_active(observer)
+
+    def _add_to_active(self, observer):
+        self._active_observers.add(observer)
+        self._update_active()
 
     def remove_observer(self, observer: 'Notifier'):
+        assert observer in self._observers
         self._observers.remove(observer)
-        if self.pending_updates > 0:
-            observer.begin_update()
+        observer._observed.remove(self)
+        if observer in self._active_observers:
+            self._remove_from_active(observer)
 
-    def _observer_begin_update(self, observer):
-        assert self.recursion_in_progress == False
-        self.recursion_in_progress = True
-        try:
-            observer.begin_update()
-        except Exception as e:
-            logging.exception('ignoring exception in finish_update')
-        finally:
-            self.recursion_in_progress = False
+    def _remove_from_active(self, observer):
+        self._active_observers.remove(observer)
+        self._update_active()
 
-    def begin_update(self):
-        if self.recursion_in_progress:
-            return  # handle circular dependencies
-        self.pending_updates += 1
-        if self.pending_updates == 1:
-            self.possibly_changed = False
-            observers = self._observers  # it may change during the following calls
-            for observer in observers:
-                self._observer_begin_update(observer)
+    def _update_active(self):
+        """
+        My active state might have changed, so I may need to readd myself to observed notifiers (or they wouldn't know
+        someone active is observing them)
+        """
+        new_is_active = (len(self._active_observers) > 0 or self._forced_active)
+        if new_is_active != self._is_active:
+            self._is_active = new_is_active
+            for observed in self._observed:
+                if self._is_active:
+                    observed._add_to_active(self)
+                else:
+                    observed._remove_from_active(self)
+            if self._is_active and self._called_when_inactive:
+                self._called_when_inactive = False
+                self.notify()
 
-    def _observer_finish_update(self, observer, possibly_changed):
-        assert self.recursion_in_progress == False
-        self.recursion_in_progress = True
-        try:
-            observer.finish_update(possibly_changed)
-        except Exception as e:
-            logging.exception('ignoring exception in finish_update')
-        finally:
-            self.recursion_in_progress = False
+    @property
+    def priority(self):
+        return self._priority
 
-    def finish_update(self, possibly_changed):
-        if self.recursion_in_progress:
-            return  # handle circular dependencies
-        assert self.pending_updates > 0
-        self.possibly_changed = self.possibly_changed or possibly_changed
-        if self.pending_updates == 1:
-            try:
-                if self.possibly_changed:
-                    self.notify_func()
-            except Exception as e:
-                logging.exception('ignoring exception in finish_update')
-            observers = self._observers  # it may change during the following calls
-            for observer in observers:
-                self._observer_finish_update(observer, possibly_changed)
+    @property
+    def active(self):
+        # self._update_active()
+        return self._is_active
 
-        self.pending_updates -= 1
+    def _set_priority_at_least(self, min_priority):
+        if self._priority < min_priority:
+            self._priority = min_priority
+            for observer in self._observers:
+                observer._set_priority_at_least(min_priority + 1)
 
-    def __enter__(self):
-        self.begin_update()
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.finish_update(True)
+    def __repr__(self):
+        return f"<Notifier name={self.name} id={id(self):x} priority={self.priority} active={self.active}>"
 
 
-@contextmanager
-def many_notifiers(*notifiers):
-    for notifier in notifiers:
-        notifier.begin_update()
 
-    try:
-        yield
-    finally:
-        for notifier in reversed(notifiers):
-            notifier.finish_update(True)
+ACTIVE_NOTIFIER = Notifier(forced_active=True, name="ACTIVE")
+
+
+def refresh_notifiers(*notifiers: Notifier):
+    """
+    Activates notifier for a moment, so if there is a call pending somewhere in (possibly indirectly) observed notifiers
+    whole chain is called.
+    """
+    assert ACTIVE_NOTIFIER not in notifiers
+    inactive_notifiers = [notifier for notifier in notifiers if not notifier.active]
+    for notifier in inactive_notifiers:
+        notifier.add_observer(ACTIVE_NOTIFIER)
+    for notifier in inactive_notifiers:
+        notifier.remove_observer(ACTIVE_NOTIFIER)
+
+def dump_notifiers_to_dot(notifier: INotifier, filename: str = 'notifiers.dot'):
+    """
+    Dumps the notifier graph to a dot file.
+    """
+    import pydot
+
+    graph = pydot.Dot(graph_type='digraph')
+
+    def add_node(n: INotifier):
+        node = pydot.Node(str(id(n)), label=n.name, shape='box', style="dashed" if not n.active else "solid")
+        graph.add_node(node)
+        return node
+
+    def add_edge(from_node, to_node):
+        edge = pydot.Edge(from_node, to_node)
+        graph.add_edge(edge)
+
+    nodes = {}
+    def traverse(n: INotifier):
+        if n in nodes:
+            return
+        nodes[n] = add_node(n)
+        if isinstance(n, Notifier):
+            for another_n in n._observers:
+                traverse(another_n)
+                add_edge(nodes[another_n], nodes[n])
+            for another_n in list(n._observers) + list(n._observed):
+                traverse(another_n)
+
+    traverse(notifier)
+    graph.write(filename, format='dot')
+# class ActiveNotifier:
+#     def __init__(self, notifier: Notifier):
+#         self._notifier = notifier
+#         self._active_notifier = Notifier(forced_active=True)
+#
+#     def __enter__(self):
+#         self._notifier.add_observer(self._active_notifier)
+#
+#     def __exit__(self, exc_type, exc_val, exc_tb):
+#         self._notifier.remove_observer(self._active_notifier)

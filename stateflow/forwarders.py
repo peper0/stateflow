@@ -3,9 +3,8 @@ from abc import abstractmethod
 from functools import wraps
 from math import ceil, floor
 
-from stateflow.common import T
 from stateflow.decorators import reactive
-from stateflow.var import Proxy
+from stateflow.common import T, Observable, assign, ev_one
 from stateflow.wrapping import add_assignop_forwarders, add_notifying_forwarders, add_reactive_forwarders
 
 UNARY_OPERATORS = [
@@ -119,24 +118,25 @@ class ForwardersBase:
 
 class ConstForwarders(ForwardersBase):
     @abstractmethod
-    def _target(self):
-        raise NotImplementedError()
+    def _target(self) -> Observable:  # FIXME: is it really needed?
+        assert isinstance(self, Observable)
+        return self
 
     def __bool__(self):
-        return bool(self._target().__eval__())
+        return bool(ev_one(self._target()))
 
     def __trunc__(self):
         # python raises an exception if __trunc__ returns non-int
-        return int(self._target().__eval__())
+        return int(ev_one(self._target()))
 
     def __str__(self):
-        return self._target().__eval__().__str__()
+        return ev_one(self._target()).__str__()
 
     def __bytes__(self):
-        return self._target().__eval__().__bytes__()
+        return ev_one(self._target()).__bytes__()
 
     def __format__(self, format_spec):
-        return format(self._target().__eval__(), format_spec)
+        return format(ev_one(self._target()), format_spec)
 
     @reactive
     def __call__(self, *args, **kwargs):
@@ -167,7 +167,7 @@ class MutatingForwarders(ForwardersBase):
         A fancy way to assign values to a variable ("v @= 5" instead of "v.__assign__(5)")
         """
         target = self._target()
-        target.__assign__(other)
+        assign(self, other)
         return self
 
 
@@ -178,6 +178,3 @@ add_assignop_forwarders(ConstForwarders, ASSIGN_MOD_OPERATORS)
 add_notifying_forwarders(MutatingForwarders, OTHER_MODYFING_1ARG + OTHER_MODYFING_2ARG)
 
 
-class Forwarders(Proxy[T], ConstForwarders, MutatingForwarders):
-    def _target(self):
-        return self

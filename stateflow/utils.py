@@ -1,12 +1,11 @@
-from contextlib import suppress
+from functools import wraps
 from typing import Callable
 
-from stateflow.common import Observable, T
+from stateflow.common import Observable, T, ev, is_observable
 from stateflow.decorators import reactive
 from stateflow.errors import NotInitializedError, ValidationError
-from stateflow.forwarders import Forwarders
-from stateflow.notifier import ScopedName
-from stateflow.var import Const, Proxy, Var
+from stateflow.notifier import ACTIVE_NOTIFIER
+from stateflow.var import Const, NotifiedProxy, Var
 
 
 def set_if_inequal(var_to_set, new_value):
@@ -29,29 +28,43 @@ def bind_vars(*vars):
     return [volatile(set_all(var)) for var in vars]
 
 
-class VolatileProxy(Proxy[T]):
-    def __init__(self, other_var: Observable[T]):
-        with ScopedName('volatile'):
-            super().__init__(other_var)
-        self._notifier.notify_func = self._trigger
+class VolatileProxy(NotifiedProxy[T]):
+    def __init__(self, inner):
+        super().__init__(inner)
+        self._notifier.add_observer(ACTIVE_NOTIFIER)
+        self._notifier.name = "Volatile"
+        self._notify() # if notifier was active, the notify would not be called again
 
-    def _trigger(self):
-        with suppress(Exception):
-            self._other_var.__eval__()  # trigger run even if the result is not used
-        return True
+    def _notify(self):
+        ev(self._inner)
 
 
-def volatile(var):
-    if var is not None:  # var may be none if we make "volatile(foo(x))" where foo is reactive and x is not observable
-        return VolatileProxy(var)
+def volatile(var_or_callable):
+    # FIXME: to be rethinked
+    if is_observable(var_or_callable):
+        return VolatileProxy(var_or_callable)
+    elif isinstance(var_or_callable, Callable):
+        func = var_or_callable
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            res = func(*args, **kwargs)
+            if is_observable(res):
+                return volatile(res)
+            else:
+                return res
+
+        return wrapper
+    else:
+        raise TypeError("argument type should be Callable or Observable (got {})".format(type(var_or_callable)))
 
 
 def const(raw):
-    return Forwarders(Const(raw))
+    return Const(raw)
 
 
 def var(raw=Var.NOT_INITIALIZED):
-    return Forwarders(Var(raw))
+    return Var(raw)
 
 
 @reactive
