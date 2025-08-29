@@ -1,10 +1,9 @@
-import abc
 import logging
 import weakref
 from _weakrefset import WeakSet
-from typing import Any, Callable, Coroutine, Optional, Set, TypeVar, Union, cast, Collection
+from typing import Any, Set
 
-from stateflow.common import NotifyFunc
+from stateflow.common import INotifier, NotifyFunc
 from stateflow.sync_refresher import get_default_refresher
 
 logger = logging.getLogger('notify')
@@ -27,57 +26,6 @@ def is_notify_func(notify_func: Any) -> bool:
     return is_hashable(notify_func) and hasattr(notify_func, '__call__')
 
 
-class INotifier(abc.ABC):
-    """
-    A node in a graph that notifications (about changes) are propagated.
-
-    A notifier observes other notifiers. It means, that if one of the observed notifiers is "notifier", the current one
-    will also be notified soon (unless it is "inactive"). Physically, the notifications are called by `Refresher`.
-
-    A notifier can be "active" or "inactive". Inactive notifiers are ignored by the refresher. Notifier is active if
-    it has at least one active observer.
-
-    A notifier has a priority, which is used to determine the order of notifications. The priority is an integer, where
-    lower numbers are called first. The priority of the notifier is always greater than the priority of all its observers.
-    """
-    name: str = ""
-
-    @abc.abstractmethod
-    def notify(self) -> None:
-        """Notify the notifier that the related object should be updated (and all dependents). """
-        ...
-
-    # FIXME rename to "call_update"?
-    @abc.abstractmethod
-    def call(self) -> None:
-        """Call the update callback in the related object and notify active dependents."""
-        ...
-
-    @property
-    @abc.abstractmethod
-    def priority(self) -> int:
-        """Return the priority of the notifier."""
-        ...
-
-    @property
-    @abc.abstractmethod
-    def active(self) -> bool:
-        """Return whether the notifier is active (i.e. it has active observers)."""
-        ...
-
-    @abc.abstractmethod
-    def add_observer(self, observer: 'INotifier') -> None:
-        """Add an observer to this notifier. It fill be notified when this notifier is called"""
-        ...
-
-    @abc.abstractmethod
-    def remove_observer(self, observer: 'INotifier') -> None:
-        """Remove an observer from this notifier. It will not be notified anymore."""
-        ...
-
-    def refresh(self) -> None:
-        refresh_notifiers(self)
-
 class DummyNotifier(INotifier):
     def __init__(self, priority: int) -> None:
         self._priority = priority
@@ -86,7 +34,7 @@ class DummyNotifier(INotifier):
     def notify(self) -> None:
         pass
 
-    def call(self) -> None:
+    def propagate(self) -> None:
         pass
 
     @property
@@ -121,7 +69,7 @@ class Notifier(INotifier):
         self._active_observers: Set['Notifier'] = weakref.WeakSet()
         self._observed: Set['Notifier'] = weakref.WeakSet()
 
-        self._priority = 0  # lowest called first; should be greater than all observed
+        self._priority = 0
 
         self._forced_active = forced_active
         self._is_active = forced_active  # notifier is active iif at least one of its observers is active or _forced_active
@@ -140,7 +88,7 @@ class Notifier(INotifier):
         logger.debug(f"Notifier notified: {self}")
         get_default_refresher().schedule_call(self)
 
-    def call(self) -> None:
+    def propagate(self) -> None:
         logger.debug(f"Notifier called: {self}")
         self.calls += 1
         if self.active:
@@ -218,12 +166,14 @@ class Notifier(INotifier):
     def __repr__(self) -> str:
         return f"<Notifier name={self.name} id={id(self):x} priority={self.priority} active={self.active}>"
 
+    def refresh(self) -> None:
+        refresh_notifiers(self)
 
 
 ACTIVE_NOTIFIER = Notifier(forced_active=True, name="ACTIVE")
 
 
-def refresh_notifiers(*notifiers: Notifier) -> None:
+def refresh_notifiers(*notifiers: INotifier) -> None:
     """
     Activates notifier for a moment, so if there is a call pending somewhere in (possibly indirectly) observed notifiers
     whole chain is called.

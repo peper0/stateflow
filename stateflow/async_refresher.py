@@ -74,7 +74,7 @@ class AsyncRefresher:
                     logger.debug('call notification ({}) [{:X}] {}'.format(notifier.priority, id(notifier),
                                                                            notifier.name))
 
-                    notifier.call()
+                    notifier.propagate()
                     # if asyncio.iscoroutine(res):
                     #     res = await res
                     notification.stats['exception'] = None

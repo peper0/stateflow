@@ -28,7 +28,7 @@ class ArgEvalError(Exception):
         arg_name: str,
         function_name: str,
         call_stack: Sequence[traceback.FrameSummary],
-        cause: BaseException
+        cause: BaseException | None
     ) -> None:
         super().__init__()
         self.__cause__ = cause

@@ -68,7 +68,7 @@ class SyncRefresher:
                     logger.debug('call notification ({}) [{:X}] {}'.format(notifier.priority, id(notifier),
                                                                            notifier.name))
 
-                    notifier.call()
+                    notifier.propagate()
                     notification.stats['exception'] = None
 
                 except Exception as e:

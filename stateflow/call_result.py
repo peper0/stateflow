@@ -7,25 +7,34 @@ from itertools import chain
 from typing import Any, Dict, List, Mapping, Sequence, Set, Tuple, Callable, Optional, TypeVar, Union, cast, Type, Iterator, ContextManager, AsyncContextManager, Protocol, Generic, ForwardRef, Iterable
 from types import TracebackType
 
-from stateflow.common import Observable, T, ev, is_observable
+from typing_extensions import TYPE_CHECKING
+
+from stateflow.common import INotifier, Observable, T, ev, is_observable
 from stateflow.errors import ArgEvalError, BodyEvalError, raise_need_async_eval, EvError
 from stateflow.internal_utils import bind_arguments
-from stateflow.notifier import Notifier, INotifier
-
+from stateflow.notifier import Notifier
 
 # Forward reference for ReactiveFunction which is defined in function.py
-ReactiveFunction = ForwardRef('stateflow.function.ReactiveFunction')
+# ReactiveFunction = ForwardRef('stateflow.function.ReactiveFunction')
+if TYPE_CHECKING:
+    from stateflow.function import ReactiveFunction
 
+def traceback_forward(tb: TracebackType | None, steps: int) -> TracebackType | None:
+    if tb is None:
+        return None
+    for i in range(steps):
+        tb = tb.tb_next or tb
+    return tb
 
 class ArgsHelper:
-    def __init__(self, args: Tuple[Any, ...], kwargs: Dict[str, Any], signature: Optional[Signature], callable: Callable) -> None:
+    def __init__(self, args: Tuple[Any, ...], kwargs: Dict[str, Any], signature: Optional[Signature], callable: Callable[..., Any]) -> None:
         if signature:
             # support default parameters
             try:
                 self.args, self.kwargs = bind_arguments(signature, args, kwargs)
             except Exception as e:
                 raise Exception('during binding {}{}'.format(callable.__name__, signature)) from e
-            args_names = list(signature.parameters)
+            args_names: list[str | None] = list(signature.parameters)
 
 
             self.args_names = args_names[0:len(self.args)]
@@ -45,7 +54,7 @@ class ArgsHelper:
         return ((index, name, arg) for index, (name, arg) in zip(self.kwargs_indices, self.kwargs.items()))
 
 
-def eval_args(args_helper: ArgsHelper, pass_args: Set[str], func_name: str, call_stack: List[Any]) -> Tuple[List[Any], Dict[str, Any]]:
+def eval_args(args_helper: ArgsHelper, pass_args: Set[str| int], func_name: str, call_stack: List[Any]) -> Tuple[List[Any], Dict[str, Any]]:
     def rewrap(index: Optional[int], name: Optional[str], arg: Any) -> Any:
         try:
             if index in pass_args or name in pass_args:
@@ -55,8 +64,9 @@ def eval_args(args_helper: ArgsHelper, pass_args: Set[str], func_name: str, call
         except EvError as exception:
             raise ArgEvalError(name or str(index), func_name, call_stack, exception.__cause__)
         except Exception as e:
+             tb = traceback_forward(e.__traceback__, 3)
              raise ArgEvalError(name or str(index), func_name, call_stack,
-                                e.with_traceback(e.__traceback__.tb_next.tb_next.tb_next))
+                                e.with_traceback(tb))
 
     return ([rewrap(index, name, arg) for index, name, arg in args_helper.iterate_args()],
             {name: rewrap(index, name, arg) for index, name, arg in args_helper.iterate_kwargs()})
@@ -64,9 +74,9 @@ def eval_args(args_helper: ArgsHelper, pass_args: Set[str], func_name: str, call
 
 def observe(arg: Any, notifier: INotifier) -> None:
     if isinstance(arg, INotifier):
-        return arg.add_observer(notifier)
+        arg.add_observer(notifier)
     else:
-        return arg.__notifier__().add_observer(notifier)
+        arg.__notifier__().add_observer(notifier)
 
 
 def maybe_observe(arg: Any, notifier: INotifier) -> None:
@@ -74,7 +84,7 @@ def maybe_observe(arg: Any, notifier: INotifier) -> None:
         observe(arg, notifier)
 
 
-def observe_args(args_helper: ArgsHelper, pass_args: Set[str], notifier: INotifier) -> None:
+def observe_args(args_helper: ArgsHelper, pass_args: Set[str|int], notifier: INotifier) -> None:
     for index, name, arg in chain(args_helper.iterate_args(), args_helper.iterate_kwargs()):
         if index not in pass_args and name not in pass_args:
             maybe_observe(arg, notifier)
@@ -91,7 +101,7 @@ class CallResult(Observable[T]):
     An observable that represents the result of a reactive function call. It will be updated when the function's
     arguments change.
     """
-    def __init__(self, reactive_function: ReactiveFunction, args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> None:
+    def __init__(self, reactive_function: 'ReactiveFunction', args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> None:
         self.reactive_function = reactive_function
         self._notifier = Notifier()
         self._notifier.name = 'CallResult of {}'.format(callable_name(reactive_function.callable))
@@ -138,7 +148,7 @@ class CallResult(Observable[T]):
     #         if reraise:
     #             raise HideStackHelper() from e
 
-    def _call(self) -> None:
+    def _call(self) -> Any:
         """
         returns one of:
         - an Observable,
@@ -159,7 +169,7 @@ class CallResult(Observable[T]):
             try:
                 return self.reactive_function.really_call(args, kwargs)
             except Exception as e:
-                raise BodyEvalError(self.call_stack, e.with_traceback(e.__traceback__.tb_next.tb_next))
+                raise BodyEvalError(self.call_stack, e.with_traceback(traceback_forward(e.__traceback__, 3)))
         finally:
             self._update_in_progress = False
 
