@@ -2,6 +2,7 @@ import gc
 import logging
 import unittest
 from unittest.mock import Mock
+from typing import Any, Optional, List, Dict, Tuple, Union, cast
 
 import pytest
 
@@ -15,49 +16,49 @@ from stateflow.notifier import dump_notifiers_to_dot
 
 # TODO: moove to some test utils
 class ValueAndTypeEq:
-    def __init__(self, value):
+    def __init__(self, value: Any) -> None:
         self._value = value
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         return isinstance(other, type(self._value)) and self._value == other
 
 
 @reactive
-def my_sum(a, b):
+def my_sum(a: Any, b: Any) -> Any:
     return a + b
 
 
 class SimpleReactive(unittest.TestCase):
-    def test_vals_positional(self):
+    def test_vals_positional(self) -> None:
         res = my_sum(2, 5)
         self.assertIsInstance(res, int)
         self.assertEqual(res, 7)
 
-    def test_vals_keyword(self):
+    def test_vals_keyword(self) -> None:
         res = my_sum(a=2, b=5)
         self.assertIsInstance(res, int)
         self.assertEqual(res, 7)
 
-    def test_var_val_positional(self):
+    def test_var_val_positional(self) -> None:
         a = var(2)
         res = my_sum(a, 5)
         self.assertIsInstance(res, Observable)
         self.assertEqual(ev(res), 7)
 
-    def test_var_val_keyword(self):
+    def test_var_val_keyword(self) -> None:
         a = var(2)
         res = my_sum(a=a, b=5)
         self.assertIsInstance(res, Observable)
         self.assertEqual(ev(res), 7)
 
-    def test_var_var(self):
+    def test_var_var(self) -> None:
         a = var(2)
         b = var(5)
         res = my_sum(a=a, b=b)
         self.assertIsInstance(res, Observable)
         self.assertEqual(ev(res), 7)
 
-    def test_var_changes(self):
+    def test_var_changes(self) -> None:
         a = var(2)
         b = var(5)
         res = my_sum(a=a, b=b)
@@ -66,7 +67,7 @@ class SimpleReactive(unittest.TestCase):
         b @= 3
         self.assertEqual(ev(res), 9)  # 6+3
 
-    def test_exception_propagation(self):
+    def test_exception_propagation(self) -> None:
         a = var(None)
         b = var()
         res = my_sum(a=a, b=b)
@@ -129,30 +130,30 @@ class SimpleReactive(unittest.TestCase):
 
 class ReactiveWithYield(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.inside = 0  # how many "theads" are waiting in yield
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         gc.collect()
         # await asyncio.sleep(0.01)
         self.assertEqual(self.inside, 0)
 
     @reactive
-    def sum_with_yield(self, a, b):
+    def sum_with_yield(self, a: Any, b: Any) -> Any:
         self.inside += 1
         # do work and return the result
         yield a + b
         # cleanup
         self.inside -= 1
 
-    def test_returns_proper_value(self):
+    def test_returns_proper_value(self) -> None:
         pytest.skip("TODO")
         res = self.sum_with_yield(2, 5)
         # in this case we must return something that finalizes the function when destroyed
         self.assertIsInstance(res, Observable)
         self.assertEqual(ev(res), 7)
 
-    def test_lost_reference_should_exit_from_yield(self):
+    def test_lost_reference_should_exit_from_yield(self) -> None:
         pytest.skip("TODO")
 
         res = self.sum_with_yield(2, 5)
@@ -162,7 +163,7 @@ class ReactiveWithYield(unittest.TestCase):
         gc.collect()
         self.assertEqual(self.inside, 0)
 
-    def test_finalize_should_exit_from_yield(self):
+    def test_finalize_should_exit_from_yield(self) -> None:
         pytest.skip("TODO")
 
         res = self.sum_with_yield(2, 5)
@@ -171,7 +172,7 @@ class ReactiveWithYield(unittest.TestCase):
         res.__finalize__()
         self.assertEqual(self.inside, 0)
 
-    def test_chainging_argument_should_exit_from_yield(self):
+    def test_chainging_argument_should_exit_from_yield(self) -> None:
         b = var(5)
         res = self.sum_with_yield(2, b=b)
         self.assertIsInstance(res, Observable)
@@ -183,7 +184,7 @@ class ReactiveWithYield(unittest.TestCase):
         res.__finalize__()
         self.assertEqual(self.inside, 0)
 
-    def test_exception_propagation(self):
+    def test_exception_propagation(self) -> None:
         b = var()
         res = self.sum_with_yield(2, b=b)
         self.assertIsInstance(res, Observable)
@@ -281,18 +282,18 @@ class ReactiveWithYield(unittest.TestCase):
 
 
 class VolatileAndMock(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.a = var(0)
         self.mock = Mock()
         self.func = reactive(self.mock)
 
-    def test_no_calls_without_volatile(self):
+    def test_no_calls_without_volatile(self) -> None:
         res = self.func(self.a)
         self.mock.assert_not_called()
         assign(self.a, 10)
         self.mock.assert_not_called()
 
-    def test_calls_with_volatile(self):
+    def test_calls_with_volatile(self) -> None:
         res = self.func(self.a)
         assign(self.a, 10)
         self.mock.assert_not_called()
@@ -305,13 +306,13 @@ class VolatileAndMock(unittest.TestCase):
 
 
 class OtherDeps(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.some_observable = var()
 
         self.mock = Mock()
         self.func = reactive(other_deps=[self.some_observable])(self.mock)
 
-    def test_vars(self):
+    def test_vars(self) -> None:
         a = var(None)
         resv = volatile(self.func(a))
         self.mock.assert_called_once_with(None)
@@ -325,7 +326,7 @@ class OtherDeps(unittest.TestCase):
         self.mock.assert_called_once_with(55)
         self.mock.reset_mock()
 
-        self.some_observable.__notifier__().call()
+        self.some_observable.__notifier__().propagate()
         self.mock.assert_called_once_with(55)
         self.mock.reset_mock()
 
@@ -338,21 +339,21 @@ called_times2 = 0
 
 
 @reactive(dep_only_args=['ignored_arg'])
-def inc_called_times2(a):
+def inc_called_times2(a: Any) -> Any:
     global called_times2
     called_times2 += 1
     return a
 
 
 class DepOnlyArgs(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.observable1 = var()
         self.observable2 = var()
 
         self.mock = Mock()
         self.func = reactive(dep_only_args=['ignored_arg'])(self.mock)
 
-    def test_vars(self):
+    def test_vars(self) -> None:
         a = var(55)
         res = volatile(self.func(a, ignored_arg=self.observable1))
         self.mock.assert_called_once_with(ValueAndTypeEq(55))
@@ -367,7 +368,7 @@ class DepOnlyArgs(unittest.TestCase):
         self.mock.assert_called_once_with(10)
         self.mock.reset_mock()
 
-    def test_iterable(self):
+    def test_iterable(self) -> None:
         a = var(55)
         res = volatile(self.func(a, ignored_arg=[self.observable1, self.observable2]))
         self.mock.assert_called_once_with(ValueAndTypeEq(55))
@@ -383,7 +384,7 @@ class DepOnlyArgs(unittest.TestCase):
 
 
 class DefaultArgs(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.mock = Mock()
         self.some_observable = var(3)
 
@@ -394,7 +395,7 @@ class DefaultArgs(unittest.TestCase):
 
         self.func = func_with_default
 
-    def test_with_const_arg(self):
+    def test_with_const_arg(self) -> None:
         res = self.func(5)
         self.assertIsInstance(res, Observable)
         resv = volatile(res)
@@ -407,7 +408,7 @@ class DefaultArgs(unittest.TestCase):
         self.mock.assert_called_once_with(5, 100)
         self.mock.reset_mock()
 
-    def test_with_const_default_arg(self):
+    def test_with_const_default_arg(self) -> None:
         res = self.func(5, param_with_default=6)
         self.assertIsInstance(res, int)
         self.mock.assert_called_once_with(5, 6)
@@ -415,18 +416,18 @@ class DefaultArgs(unittest.TestCase):
 
 
 @reactive(pass_args=['a'])
-def pass_args(a, b):
+def pass_args(a: Any, b: Any) -> Any:
     global called_times2
     called_times2 += 1
     return ev(a) + b
 
 
 class PassArgs(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.mock = Mock()
         self.func = reactive(pass_args=['a'])(self.mock)
 
-    def test_1(self):
+    def test_1(self) -> None:
         global some_observable
         a = var(5)
         b = var(3)

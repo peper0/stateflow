@@ -1,4 +1,5 @@
 import unittest
+from typing import Any, cast
 from unittest.mock import Mock
 
 from stateflow import Notifier
@@ -7,16 +8,16 @@ from stateflow.sync_refresher import UpdateTransaction
 
 
 class NotifierTests(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.cbk = Mock(return_value=True)
         self._notifier = Notifier(self.cbk)
 
-    def test_calls_callback_when_active(self):
+    def test_calls_callback_when_active(self) -> None:
         self._notifier.add_observer(ACTIVE_NOTIFIER)
         self._notifier.notify()
         self.cbk.assert_called_once()
 
-    def test_calls_callback_once_per_transaction(self):
+    def test_calls_callback_once_per_transaction(self) -> None:
         self._notifier.add_observer(ACTIVE_NOTIFIER)
         with UpdateTransaction():
             self._notifier.notify()
@@ -28,11 +29,11 @@ class NotifierTests(unittest.TestCase):
             self._notifier.notify()
         self.cbk.assert_called_once()
 
-    def test_dont_call_callback_when_not_active(self):
+    def test_dont_call_callback_when_not_active(self) -> None:
         self._notifier.notify()
         self.cbk.assert_not_called()
 
-    def test_activeness_may_change(self):
+    def test_activeness_may_change(self) -> None:
         self._notifier.add_observer(ACTIVE_NOTIFIER)
         self._notifier.remove_observer(ACTIVE_NOTIFIER)
         self._notifier.notify()
@@ -48,7 +49,7 @@ class NotifierTests(unittest.TestCase):
 
 
 class TwoNotifiersTests(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         """
         notifier2 observes notifier1
         """
@@ -58,15 +59,15 @@ class TwoNotifiersTests(unittest.TestCase):
         self._notifier2 = Notifier(self.cbk2)
         self._notifier1.add_observer(self._notifier2)
 
-    def test_observer_has_greater_priority_number(self):
+    def test_observer_has_greater_priority_number(self) -> None:
         self.assertGreater(self._notifier2.priority, self._notifier1.priority)
 
-    def test_dont_call_callback_when_not_active(self):
+    def test_dont_call_callback_when_not_active(self) -> None:
         self._notifier1.notify()
         self.cbk1.assert_not_called()
         self.cbk2.assert_not_called()
 
-    def test_both_called_if_second_active(self):
+    def test_both_called_if_second_active(self) -> None:
         self._notifier2.add_observer(ACTIVE_NOTIFIER)
         self._notifier1.notify()
         self.cbk1.assert_called_once()
@@ -79,13 +80,13 @@ class TwoNotifiersTests(unittest.TestCase):
         self.cbk1.assert_not_called()
         self.cbk2.assert_not_called()
 
-    def test_first_called_if_first_active(self):
+    def test_first_called_if_first_active(self) -> None:
         self._notifier1.add_observer(ACTIVE_NOTIFIER)
         self._notifier1.notify()
         self.cbk1.assert_called_once()
         self.cbk2.assert_not_called()
 
-    def test_second_not_called_if_first_returned_false(self):
+    def test_second_not_called_if_first_returned_false(self) -> None:
         self._notifier2.add_observer(ACTIVE_NOTIFIER)
         self.cbk1.return_value = False
         self._notifier1.notify()
